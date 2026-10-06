@@ -63,6 +63,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val state = mutableState.asStateFlow()
 
     init {
+        // Po restarcie procesu żadne zdjęcie nie jest już częścią aktywnego
+        // przepływu, więc usuwamy ewentualne pliki pozostałe po awarii.
+        File(application.cacheDir, "captures").listFiles()?.forEach { runCatching { it.delete() } }
         viewModelScope.launch {
             val restored = store.load()
             if (!restored.isNullOrEmpty()) {
@@ -93,7 +96,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             runCatching { recognizer.detect(uri) }
                 .onSuccess { proposal -> mutableState.update { it.copy(screen = AppScreen.CROP, cropProposal = proposal, busy = false) } }
-                .onFailure { error -> mutableState.update { it.copy(busy = false, error = error.message ?: "Nie udało się odczytać zdjęcia") } }
+                .onFailure { error ->
+                    deleteCapture(uri)
+                    mutableState.update { it.copy(busy = false, error = error.message ?: "Nie udało się odczytać zdjęcia") }
+                }
         }
     }
 
