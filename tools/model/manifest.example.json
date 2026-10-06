@@ -1,0 +1,14 @@
+[
+  {
+    "image": "training-data/boards/example.jpg",
+    "split": "train",
+    "corners": [[0.05, 0.05], [0.95, 0.05], [0.95, 0.95], [0.05, 0.95]],
+    "labels": [
+      "RABBIT", "FOX", "DRAGONFLY", "TROUT", "BEAR",
+      "BEE", "EAGLE", "DEER", "WOLF", "STREAM",
+      "MEADOW", "RABBIT", "FOX", "DRAGONFLY", "TROUT",
+      "BEAR", "BEE", "EAGLE", "DEER", "WOLF"
+    ]
+  }
+]
+

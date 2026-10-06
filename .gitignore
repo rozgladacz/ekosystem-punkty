@@ -1,0 +1,14 @@
+*.iml
+.gradle/
+.idea/
+local.properties
+build/
+**/build/
+captures/
+training-data/
+keystore.properties
+*.jks
+*.keystore
+.signing/
+app/release/
+
