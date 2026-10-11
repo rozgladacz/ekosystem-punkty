@@ -9,6 +9,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from PIL import Image, ImageOps
 
 CLASSES = {
     "RABBIT", "FOX", "DRAGONFLY", "TROUT", "BEAR", "BEE",
@@ -31,11 +32,19 @@ def main() -> None:
         if len(labels) != 20 or not set(labels) <= CLASSES:
             raise ValueError(f"Plansza {board_index}: wymagane jest 20 prawidłowych etykiet")
         image_path = Path(entry["image"])
-        image = cv2.imread(str(image_path))
-        if image is None:
-            raise FileNotFoundError(image_path)
+        with Image.open(image_path) as source_image:
+            display_image = ImageOps.exif_transpose(source_image).convert("RGB")
+        rotation = entry.get("rotation_degrees", 0)
+        if rotation not in {0, 90, 180, 270}:
+            raise ValueError(f"Plansza {board_index}: nieprawidłowy obrót {rotation}")
+        if rotation:
+            display_image = display_image.rotate(rotation, expand=True)
+        image = cv2.cvtColor(np.asarray(display_image), cv2.COLOR_RGB2BGR)
         height, width = image.shape[:2]
-        source = np.float32([[x * width, y * height] for x, y in entry["corners"]])
+        corners = entry["corners"]
+        if len(corners) != 4 or any(len(corner) != 2 or any(not 0 <= value <= 1 for value in corner) for corner in corners):
+            raise ValueError(f"Plansza {board_index}: wymagane są cztery narożniki 0–1")
+        source = np.float32([[x * width, y * height] for x, y in corners])
         target = np.float32([[0, 0], [WIDTH, 0], [WIDTH, HEIGHT], [0, HEIGHT]])
         warped = cv2.warpPerspective(image, cv2.getPerspectiveTransform(source, target), (WIDTH, HEIGHT))
         cell_width, cell_height = WIDTH // 5, HEIGHT // 4

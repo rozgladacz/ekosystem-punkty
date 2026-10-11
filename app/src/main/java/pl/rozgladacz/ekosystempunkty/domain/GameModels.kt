@@ -45,6 +45,7 @@ data class PlayerBoard(
 data class RecognitionCell(
     val type: CardType?,
     val confidence: Float,
+    val visualQuality: Float = 1f,
 )
 
 data class NormalizedPoint(val x: Float, val y: Float)

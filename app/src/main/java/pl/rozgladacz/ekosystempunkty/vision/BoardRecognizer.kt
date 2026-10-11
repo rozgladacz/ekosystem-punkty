@@ -62,7 +62,11 @@ class BoardRecognizer(private val context: Context) {
                         cellWidth - insetX * 2,
                         cellHeight - insetY * 2,
                     )
-                    classifier.classify(crop).also { crop.recycle() }
+                    try {
+                        classifier.classify(crop).copy(visualQuality = GlareQuality.score(crop))
+                    } finally {
+                        crop.recycle()
+                    }
                 }
                 RecognitionResult(cells, corners, cells.map { it.confidence }.average().toFloat())
             } finally {

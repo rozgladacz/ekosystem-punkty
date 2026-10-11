@@ -65,11 +65,17 @@ fun EcosystemApp(
                 )
                 AppScreen.CAMERA -> CameraScreen(
                     playerName = state.players.getOrNull(state.activePlayerIndex)?.name.orEmpty(),
+                    completedPhotos = state.review?.imageUris?.size ?: 0,
                     onCaptured = viewModel::onPhotoCaptured,
                     onCancel = viewModel::cancelCaptureFlow,
                 )
                 AppScreen.CROP -> state.cropProposal?.let { proposal ->
-                    CropScreen(proposal, onConfirm = viewModel::confirmCrop, onRetake = viewModel::retakePhoto)
+                    CropScreen(
+                        proposal,
+                        additionalShot = state.review?.imageUris?.isNotEmpty() == true,
+                        onConfirm = viewModel::confirmCrop,
+                        onRetake = viewModel::retakePhoto,
+                    )
                 }
                 AppScreen.REVIEW -> state.review?.let { review ->
                     ReviewScreen(
@@ -77,6 +83,7 @@ fun EcosystemApp(
                         review = review,
                         onCardChanged = viewModel::setReviewCard,
                         onConfirm = viewModel::confirmReview,
+                        onAddPhoto = viewModel::addPhotoToReview,
                         onRetake = viewModel::retakePhoto,
                         onCancel = viewModel::cancelCaptureFlow,
                     )

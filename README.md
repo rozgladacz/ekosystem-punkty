@@ -3,11 +3,14 @@
 Nieoficjalna, lokalna aplikacja Android do liczenia punktów w podstawowej
 polskiej edycji gry „Ekosystem”. Aplikacja prowadzi przez sfotografowanie układu
 5×4 każdego gracza, pozwala poprawić rozpoznane karty i wyświetla końcową tabelę.
+Jeśli odblask zasłoni pole, można dodać do czterech zdjęć tego samego układu,
+bez przesuwania kart. Rozpoznania są łączone pole po polu; sprzeczne lub
+prześwietlone pola wymagają ręcznego potwierdzenia.
 
 ## Prywatność
 
 - brak kont, backendu, telemetrii i reklam;
-- zdjęcia są analizowane na urządzeniu i usuwane po zatwierdzeniu;
+- zdjęcia są analizowane na urządzeniu i wszystkie ujęcia są usuwane po zatwierdzeniu;
 - stan obejmuje wyłącznie bieżącą partię;
 - aplikacja nie sprawdza aktualizacji w tle ani przy uruchomieniu;
 - połączenie z GitHub następuje tylko po naciśnięciu **Sprawdź aktualizacje**.

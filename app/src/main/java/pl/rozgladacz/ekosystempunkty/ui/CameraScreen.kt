@@ -48,6 +48,7 @@ import java.util.UUID
 @Composable
 fun CameraScreen(
     playerName: String,
+    completedPhotos: Int,
     onCaptured: (Uri) -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -104,7 +105,11 @@ fun CameraScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(playerName, color = Color.White, style = MaterialTheme.typography.titleLarge)
-            Text("Umieść wszystkie 20 kart wewnątrz prowadnicy", color = Color.White)
+            Text(
+                if (completedPhotos == 0) "Umieść wszystkie 20 kart wewnątrz prowadnicy"
+                else "Dodatkowe zdjęcie ${completedPhotos + 1}/4: nie przesuwaj kart; zmień kąt, by ominąć odblask",
+                color = Color.White,
+            )
         }
 
         error?.let {

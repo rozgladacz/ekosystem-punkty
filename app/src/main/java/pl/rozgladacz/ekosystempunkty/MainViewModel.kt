@@ -12,6 +12,7 @@ import pl.rozgladacz.ekosystempunkty.data.SessionStore
 import pl.rozgladacz.ekosystempunkty.domain.BoardGrid
 import pl.rozgladacz.ekosystempunkty.domain.CardType
 import pl.rozgladacz.ekosystempunkty.domain.GameScore
+import pl.rozgladacz.ekosystempunkty.domain.MultiPhotoFusion
 import pl.rozgladacz.ekosystempunkty.domain.PlayerBoard
 import pl.rozgladacz.ekosystempunkty.domain.RecognitionCell
 import pl.rozgladacz.ekosystempunkty.domain.ScoreEngine
@@ -29,8 +30,12 @@ enum class AppScreen { SETUP, PLAYERS, CAMERA, CROP, REVIEW, RESULTS, SETTINGS }
 data class ReviewState(
     val playerIndex: Int,
     val cells: List<RecognitionCell>,
-    val imageUri: Uri?,
-)
+    val imageUris: List<Uri> = emptyList(),
+    val shotCells: List<List<RecognitionCell>> = emptyList(),
+    val manualOverrides: Map<Int, CardType> = emptyMap(),
+) {
+    val imageUri: Uri? get() = imageUris.lastOrNull()
+}
 
 sealed interface UpdateUiState {
     data object Idle : UpdateUiState
@@ -88,7 +93,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun capturePlayer(index: Int) {
-        mutableState.update { it.copy(screen = AppScreen.CAMERA, activePlayerIndex = index, error = null) }
+        mutableState.update {
+            it.copy(screen = AppScreen.CAMERA, activePlayerIndex = index, review = null, cropProposal = null, error = null)
+        }
+    }
+
+    fun addPhotoToReview() {
+        mutableState.update { state ->
+            val review = state.review ?: return@update state
+            if (state.screen != AppScreen.REVIEW || review.imageUris.isEmpty() ||
+                review.imageUris.size >= MAX_PHOTOS_PER_BOARD
+            ) return@update state
+            state.copy(screen = AppScreen.CAMERA, cropProposal = null, error = null)
+        }
     }
 
     fun onPhotoCaptured(uri: Uri) {
@@ -108,11 +125,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             runCatching { recognizer.recognize(proposal.imageUri, proposal.corners) }
                 .onSuccess { result ->
-                    mutableState.update {
-                        it.copy(
+                    mutableState.update { state ->
+                        val previous = state.review?.takeIf { it.playerIndex == state.activePlayerIndex }
+                        val shots = previous?.shotCells.orEmpty() + listOf(result.cells)
+                        val overrides = previous?.manualOverrides.orEmpty()
+                        state.copy(
                             screen = AppScreen.REVIEW,
                             busy = false,
-                            review = ReviewState(it.activePlayerIndex, result.cells, proposal.imageUri),
+                            cropProposal = null,
+                            review = ReviewState(
+                                playerIndex = state.activePlayerIndex,
+                                cells = MultiPhotoFusion.merge(shots, overrides),
+                                imageUris = previous?.imageUris.orEmpty() + proposal.imageUri,
+                                shotCells = shots,
+                                manualOverrides = overrides,
+                            ),
                         )
                     }
                 }
@@ -123,9 +150,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setReviewCard(index: Int, type: CardType) {
         mutableState.update { state ->
             val review = state.review ?: return@update state
-            state.copy(review = review.copy(cells = review.cells.toMutableList().also {
-                it[index] = RecognitionCell(type, 1f)
-            }))
+            state.copy(review = review.copy(
+                cells = review.cells.toMutableList().also { it[index] = RecognitionCell(type, 1f) },
+                manualOverrides = review.manualOverrides + (index to type),
+            ))
         }
     }
 
@@ -138,7 +166,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 grid = BoardGrid.complete(review.cells.map { requireNotNull(it.type) }),
             )
         }
-        deleteCapture(review.imageUri)
+        review.imageUris.forEach(::deleteCapture)
         val next = updated.indexOfFirst { !it.grid.isComplete }
         val score = if (next < 0) ScoreEngine.score(updated) else null
         mutableState.update {
@@ -160,21 +188,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(
                 screen = AppScreen.REVIEW,
                 activePlayerIndex = index,
-                review = ReviewState(index, player.grid.cells.map { type -> RecognitionCell(type, 1f) }, null),
+                review = ReviewState(index, player.grid.cells.map { type -> RecognitionCell(type, 1f) }),
             )
         }
     }
 
     fun retakePhoto() {
-        val reviewUri = mutableState.value.review?.imageUri
-        val cropUri = mutableState.value.cropProposal?.imageUri
-        deleteCapture(reviewUri ?: cropUri)
-        mutableState.update { it.copy(screen = AppScreen.CAMERA, review = null, cropProposal = null, error = null) }
+        val state = mutableState.value
+        if (state.screen == AppScreen.CROP) {
+            deleteCapture(state.cropProposal?.imageUri)
+            mutableState.update { it.copy(screen = AppScreen.CAMERA, cropProposal = null, error = null) }
+        } else {
+            state.review?.imageUris.orEmpty().forEach(::deleteCapture)
+            mutableState.update { it.copy(screen = AppScreen.CAMERA, review = null, cropProposal = null, error = null) }
+        }
     }
 
     fun cancelCaptureFlow() {
-        deleteCapture(mutableState.value.cropProposal?.imageUri ?: mutableState.value.review?.imageUri)
-        mutableState.update { it.copy(screen = AppScreen.PLAYERS, cropProposal = null, review = null, busy = false, error = null) }
+        val state = mutableState.value
+        deleteCapture(state.cropProposal?.imageUri)
+        val keepReview = state.review?.takeIf { it.imageUris.isNotEmpty() }
+        if (keepReview == null) state.review?.imageUris.orEmpty().forEach(::deleteCapture)
+        mutableState.update {
+            it.copy(
+                screen = if (keepReview == null) AppScreen.PLAYERS else AppScreen.REVIEW,
+                cropProposal = null,
+                review = keepReview,
+                busy = false,
+                error = null,
+            )
+        }
     }
 
     fun showResults() {
@@ -226,7 +269,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun newGame() {
         val current = mutableState.value
-        deleteCapture(current.cropProposal?.imageUri ?: current.review?.imageUri)
+        deleteCapture(current.cropProposal?.imageUri)
+        current.review?.imageUris.orEmpty().forEach(::deleteCapture)
         mutableState.value = AppUiState()
         viewModelScope.launch { store.clear() }
     }
@@ -241,5 +285,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun deleteCapture(uri: Uri?) {
         if (uri?.scheme == "file") runCatching { uri.path?.let(::File)?.delete() }
+    }
+
+    companion object {
+        const val MAX_PHOTOS_PER_BOARD = 4
     }
 }

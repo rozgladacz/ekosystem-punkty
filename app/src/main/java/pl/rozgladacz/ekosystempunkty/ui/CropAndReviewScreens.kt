@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import pl.rozgladacz.ekosystempunkty.ReviewState
+import pl.rozgladacz.ekosystempunkty.MainViewModel
 import pl.rozgladacz.ekosystempunkty.domain.BoardGrid
 import pl.rozgladacz.ekosystempunkty.domain.CardType
 import pl.rozgladacz.ekosystempunkty.domain.NormalizedPoint
@@ -60,6 +61,7 @@ import kotlin.math.pow
 @Composable
 fun CropScreen(
     proposal: CropProposal,
+    additionalShot: Boolean,
     onConfirm: (CropProposal) -> Unit,
     onRetake: () -> Unit,
 ) {
@@ -70,7 +72,11 @@ fun CropScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Ustaw narożniki układu", color = Color.White, style = MaterialTheme.typography.headlineSmall)
-        Text("Przeciągnij punkty, aby obejmowały dokładnie 20 kart.", color = Color.White)
+        Text(
+            if (additionalShot) "Ustaw te same 20 pól w tej samej kolejności co na poprzednim zdjęciu."
+            else "Przeciągnij punkty, aby obejmowały dokładnie 20 kart.",
+            color = Color.White,
+        )
         bitmap?.let { image ->
             Box(
                 Modifier.fillMaxWidth().weight(1f).aspectRatio(image.width.toFloat() / image.height),
@@ -133,6 +139,7 @@ fun ReviewScreen(
     review: ReviewState,
     onCardChanged: (Int, CardType) -> Unit,
     onConfirm: () -> Unit,
+    onAddPhoto: () -> Unit,
     onRetake: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -147,6 +154,13 @@ fun ReviewScreen(
             if (missing == 0) "Dotknij pola, aby poprawić rozpoznaną kartę."
             else "Uzupełnij $missing nierozpoznanych pól. Dotknij każdego czerwonego pola.",
         )
+        if (review.imageUris.isNotEmpty()) {
+            Text(
+                "Zdjęcia tego układu: ${review.imageUris.size}. Sprzeczne lub prześwietlone pola " +
+                    "pozostają do ręcznej poprawki.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
         review.imageUri?.let { uri ->
             val image = rememberPreviewBitmap(uri.toString())
             image?.let {
@@ -180,6 +194,11 @@ fun ReviewScreen(
                         Text("${index / 5 + 1},${index % 5 + 1}", style = MaterialTheme.typography.labelSmall)
                     }
                 }
+            }
+        }
+        if (review.imageUris.isNotEmpty() && review.imageUris.size < MainViewModel.MAX_PHOTOS_PER_BOARD) {
+            OutlinedButton(onClick = onAddPhoto, modifier = Modifier.fillMaxWidth()) {
+                Text("Dodaj zdjęcie tego samego układu")
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
