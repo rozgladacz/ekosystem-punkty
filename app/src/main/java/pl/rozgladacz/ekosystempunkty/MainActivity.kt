@@ -32,8 +32,12 @@ class MainActivity : ComponentActivity() {
                     pendingInstallation?.takeIf { packageManager.canRequestPackageInstalls() }?.let(::launchInstaller)
                     pendingInstallation = null
                 }
+                val archiveLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("application/zip"),
+                ) { uri -> uri?.let(viewModel::exportDevelopmentArchive) }
                 EcosystemApp(
                     viewModel = viewModel,
+                    onExportDevelopment = { archiveLauncher.launch("ekosystem-trening.zip") },
                     onInstallUpdate = { file ->
                         if (packageManager.canRequestPackageInstalls()) {
                             launchInstaller(file)

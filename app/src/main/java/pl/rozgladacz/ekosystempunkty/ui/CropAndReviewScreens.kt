@@ -74,9 +74,15 @@ fun CropScreen(
         Text("Ustaw narożniki układu", color = Color.White, style = MaterialTheme.typography.headlineSmall)
         Text(
             if (additionalShot) "Ustaw te same 20 pól w tej samej kolejności co na poprzednim zdjęciu."
-            else "Przeciągnij punkty, aby obejmowały dokładnie 20 kart.",
+            else "Przeciągnij punkty, aby obejmowały dokładnie 20 kart. Linie powinny biec między kartami.",
             color = Color.White,
         )
+        if (proposal.confidence < .6f) {
+            Text(
+                "Wykrycie jest przybliżone. Sprawdź wszystkie linie siatki przed rozpoznaniem.",
+                color = Color(0xFFFFD54F),
+            )
+        }
         bitmap?.let { image ->
             Box(
                 Modifier.fillMaxWidth().weight(1f).aspectRatio(image.width.toFloat() / image.height),
@@ -115,6 +121,26 @@ fun CropScreen(
                     },
                 ) {
                     val points = corners.map { Offset(it.x * size.width, it.y * size.height) }
+                    fun between(a: Offset, b: Offset, fraction: Float) =
+                        Offset(a.x + (b.x - a.x) * fraction, a.y + (b.y - a.y) * fraction)
+                    for (column in 1..4) {
+                        val fraction = column / 5f
+                        drawLine(
+                            Color(0xFFFFD54F),
+                            between(points[0], points[1], fraction),
+                            between(points[3], points[2], fraction),
+                            3f,
+                        )
+                    }
+                    for (row in 1..3) {
+                        val fraction = row / 4f
+                        drawLine(
+                            Color(0xFFFFD54F),
+                            between(points[0], points[3], fraction),
+                            between(points[1], points[2], fraction),
+                            3f,
+                        )
+                    }
                     points.indices.forEach { index ->
                         drawLine(Color(0xFF9CFFB5), points[index], points[(index + 1) % points.size], 5f)
                         drawCircle(Color.White, 22f, points[index])

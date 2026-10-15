@@ -5,7 +5,7 @@ ignorowane przez Git. Minimum z planu to trzy osobne zdjęcia każdego typu
 karty i 30 pełnych układów wykonanych przy różnych tłach, kątach i oświetleniu.
 Wynik przeglądu obecnie dostarczonych zdjęć opisuje `PHOTO_AUDIT.md`.
 
-`Zdjecia/index.csv` zawiera typ, status, sesję, uwagę i SHA-256 każdego ze 118
+`Zdjecia/index.csv` zawiera typ, status, sesję, uwagę i SHA-256 każdego ze 140
 oryginałów. Zdjęcia są w `pojedyncze/`, `uklady/`, `pogladowe/` i `odrzucone/`.
 `candidate` oznacza ujęcie do dalszego sprawdzenia, nie gwarancję jakości
 treningowej. Dla dziesięciu nowych pojedynczych kart osobną decyzję jakości
@@ -43,6 +43,13 @@ Pojedyncze karty mają etykiety katalogów i indeksu, lecz wymagają jeszcze
 kadrowania i selekcji jakości. Nie należy oceniać modelu na niemal identycznych
 zdjęciach tej samej karty i z tej samej sesji, na których był trenowany.
 
+Nowe 11 układów sfotografowanych dwukrotnie 12 i 15 października ma etykiety
+wszystkich 20 pól, ale geometrię `pending`. Oba ujęcia muszą pozostać w jednej
+grupie (`Zdjecia/multishot_groups.csv`). Nie są częścią powyższego manifestu
+ani wycinków treningowych; posłużyły do rozwojowego sprawdzenia detektora,
+więc końcowy test całego przepływu wymaga kolejnych, nowych układów.
+Szczegóły opisują `PHOTO_AUDIT.md` i `DETECTION_REPORT.md`.
+
 ## 2. Wycięcie pól
 
 ```bash
@@ -51,15 +58,22 @@ python tools/model/prepare_dataset.py Zdjecia/manifest.prototype.json training-d
 
 ## 3. Trening i eksport
 
-W środowisku z Pythonem 3.11 zainstaluj `tensorflow`, `opencv-python`, `numpy`
-i `Pillow`,
-a następnie uruchom:
+W środowisku z Pythonem 3.13 i TensorFlow 2.20.0 uruchom:
 
 ```bash
-python tools/model/train_model.py training-data/dataset-prototype app/src/main/assets/card_classifier.tflite
+python tools/model/train_model.py training-data/dataset-prototype training-data/model-prototype/card_classifier.tflite
+python tools/model/evaluate_tflite.py training-data/dataset-prototype training-data/model-prototype/card_classifier.tflite
 ```
 
-Skrypt raportuje trafność zbioru testowego i eksportuje model UINT8 224×224.
-Model należy dodać dopiero po osiągnięciu co najmniej 98% trafności testowej i
-sprawdzeniu prawa do jego dystrybucji.
+Pierwszy skrypt zapisuje model Keras, metryki i model UINT8 224×224 wyłącznie
+poza aplikacją. Drugi mierzy rzeczywisty wynik wyeksportowanego TFLite, w tym
+precyzję automatycznych decyzji i liczbę całych plansz bez błędu. Do porównania
+bez kwantyzacji służy `export_float_tflite.py`; do kalibracji INT8 wszystkimi
+próbkami — `export_int8_tflite.py`. Wyniki pierwszego eksperymentu opisuje
+`TRAINING_REPORT.md`.
+
+Nie kopiuj modelu do `app/src/main/assets/` na podstawie samych metryk Keras.
+Eksport INT8 może mieć istotnie gorszą trafność i wymaga osobnej weryfikacji.
+Przed wydaniem potrzebna jest także kontrola całego przepływu na telefonie,
+walidacja wykrywania siatki oraz sprawdzenie prawa do dystrybucji wag.
 

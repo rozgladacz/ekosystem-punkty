@@ -1,4 +1,6 @@
 *.iml
+__pycache__/
+*.pyc
 .gradle/
 .idea/
 local.properties
@@ -12,4 +14,5 @@ keystore.properties
 *.keystore
 .signing/
 app/release/
+dist/
 

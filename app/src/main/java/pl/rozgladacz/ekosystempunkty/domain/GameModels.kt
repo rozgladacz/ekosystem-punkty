@@ -40,6 +40,7 @@ data class PlayerBoard(
     val id: String,
     val name: String,
     val grid: BoardGrid,
+    val developmentGroupId: String? = null,
 )
 
 data class RecognitionCell(

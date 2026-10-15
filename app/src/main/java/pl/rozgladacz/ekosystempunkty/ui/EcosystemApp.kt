@@ -35,6 +35,7 @@ import java.io.File
 fun EcosystemApp(
     viewModel: MainViewModel,
     onInstallUpdate: (File) -> Unit,
+    onExportDevelopment: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val showTopBar = state.screen !in setOf(AppScreen.CAMERA, AppScreen.CROP)
@@ -98,9 +99,16 @@ fun EcosystemApp(
                 }
                 AppScreen.SETTINGS -> SettingsScreen(
                     updateState = state.update,
+                    developmentMode = state.developmentMode,
+                    savedPhotoCount = state.developmentSaved,
+                    developmentBusy = state.developmentBusy,
+                    developmentMessage = state.developmentMessage,
                     onCheck = viewModel::checkForUpdates,
                     onDownload = viewModel::downloadUpdate,
                     onInstall = onInstallUpdate,
+                    onDevelopmentModeChange = viewModel::setDevelopmentMode,
+                    onExportDevelopment = onExportDevelopment,
+                    onDeleteDevelopment = viewModel::deleteDevelopmentArchive,
                     onBack = viewModel::closeSettings,
                 )
             }

@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import tensorflow as tf
 
 CLASSES = [
@@ -33,6 +35,9 @@ def main() -> None:
     if len(sys.argv) != 3:
         raise SystemExit("Użycie: train_model.py KATALOG_DANYCH MODEL.tflite")
     root, output = Path(sys.argv[1]), Path(sys.argv[2])
+    if output.resolve().is_relative_to(Path("app/src/main/assets").resolve()):
+        raise SystemExit("Zapisz model poza aplikacją i oceń wyeksportowany TFLite przed wdrożeniem")
+    tf.keras.utils.set_random_seed(2026)
     train = dataset(root, "train", True)
     validation = dataset(root, "validation", False)
     test = dataset(root, "test", False)
@@ -63,13 +68,48 @@ def main() -> None:
     outputs = tf.keras.layers.Dense(len(CLASSES), activation="softmax")(x)
     model = tf.keras.Model(inputs, outputs)
     model.compile(optimizer="adam", loss="categorical_crossentropy", metrics=["accuracy"])
-    model.fit(train, validation_data=validation, epochs=20, callbacks=[
+    history = model.fit(train, validation_data=validation, epochs=20, verbose=2, callbacks=[
         tf.keras.callbacks.EarlyStopping(patience=4, restore_best_weights=True),
     ])
-    _, accuracy = model.evaluate(test)
+    loss, accuracy = model.evaluate(test, verbose=0)
+    predictions = model.predict(test, verbose=0)
+    actual = np.concatenate([np.argmax(labels.numpy(), axis=1) for _, labels in test])
+    predicted = np.argmax(predictions, axis=1)
+    accepted = np.max(predictions, axis=1) >= 0.85
+    accepted_count = int(np.sum(accepted))
+    accepted_correct = int(np.sum((predicted == actual) & accepted))
+    accepted_precision = accepted_correct / accepted_count if accepted_count else None
+    metrics = {
+        "tensorflow_version": tf.__version__,
+        "seed": 2026,
+        "test_count": int(len(actual)),
+        "test_loss": float(loss),
+        "test_accuracy": float(accuracy),
+        "accepted_threshold": 0.85,
+        "accepted_count": accepted_count,
+        "accepted_correct": accepted_correct,
+        "accepted_precision": accepted_precision,
+        "class_results": {
+            name: {
+                "count": int(np.sum(actual == index)),
+                "correct": int(np.sum((actual == index) & (predicted == index))),
+            }
+            for index, name in enumerate(CLASSES)
+        },
+        "epochs_completed": len(history.history["loss"]),
+        "history": {key: [float(value) for value in values] for key, values in history.history.items()},
+    }
     print(f"Test accuracy: {accuracy:.4f}")
-    if accuracy < 0.98:
-        raise SystemExit("Model nie osiągnął wymaganego progu 98%")
+    print(f"Accepted precision: {accepted_precision} ({accepted_count}/{len(actual)} accepted)")
+    quality_gate_passed = accuracy >= 0.98 and accepted_precision is not None and accepted_precision >= 0.99
+    metrics["quality_gate_passed"] = quality_gate_passed
+    metrics["gate_scope"] = "Keras FLOAT32 only; evaluate exported TFLite separately"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.with_suffix(".metrics.json").write_text(
+        json.dumps(metrics, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    # Zachowaj kandydat poza aplikacją, by można go było ponownie ocenić.
+    model.save(output.with_suffix(".keras"))
 
     representative = train.unbatch().batch(1).take(200)
 
@@ -83,7 +123,6 @@ def main() -> None:
     converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
     converter.inference_input_type = tf.uint8
     converter.inference_output_type = tf.uint8
-    output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(converter.convert())
 
 

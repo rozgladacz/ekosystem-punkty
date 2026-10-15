@@ -84,3 +84,47 @@ Na pierwszym pole (4,5) jest całkowicie białe od odbicia lampy; na drugim
 widać lisa. Para jest opisana w `Zdjecia/multishot_groups.csv`. Nr 115 nie
 wchodzi do zbioru treningowego ani testowego jako samodzielne ujęcie;
 może posłużyć do osobnej walidacji łączenia zdjęć.
+
+## Uzupełnienie — 15 października 2026
+
+Przeniesiono bez modyfikowania bajtów 22 nowe oryginały z `Zdjecia/Nowe/`
+do katalogów sesji w `Zdjecia/uklady/`. Kontrolne sumy SHA-256 są w
+`Zdjecia/index.csv`, a manifest operacji w `Zdjecia/audyt/manifest_20261015.csv`.
+Indeks obejmuje teraz **140 zdjęć**: 63 pojedyncze, 76 zdjęć plansz i jedno
+poglądowe. Nowa partia to **11 różnych układów, po dwa ujęcia**; obie klatki
+każdej pary mają niezmieniony układ kart. Pary i obserwacje odblasków zapisano
+w `Zdjecia/multishot_groups.csv`.
+
+Wszystkim 22 klatkom przypisano w `Zdjecia/board_labels_review.csv` po 20
+etykiet, czyli 220 **różnych pól układu**, a nie 440 niezależnych kart.
+Etykiety par są identyczne i obejmują wszystkie 11 rodzajów kart. Odczyt jest
+wizualny, bez niezależnego drugiego anotatora. Dziesięć układów można poddać
+dalszej kontroli geometrii; para 129–130 ma karty nakładające się i nierówne
+kolumny, dlatego jest przypadkiem trudnym, a nie zwykłą próbką siatki 5×4.
+W parze 137–138 górne łąki są prześwietlone w obu ujęciach, więc drugi kadr
+nie musi usuwać każdego odblasku.
+
+Narożników i podziału na 20 pól tej partii **jeszcze nie zatwierdzono**:
+`geometry_status=pending`, `corners=null` w
+`Zdjecia/board_annotations_review.json`. Układy pozostają poza istniejącym
+manifestem treningowym, walidacyjnym i testowym. Posłużyły następnie do
+**rozwojowej oceny i strojenia detektora**, więc nie są już niezależnym zbiorem
+do końcowego potwierdzenia jakości całego przepływu. Oryginały nadal nie były
+użyte do uczenia klasyfikatora.
+
+Liczebnościowo jest teraz 30 wcześniejszych układów w prototypowym
+manifeście oraz 11 nowych par rozwojowych. Wymagane progi 98%/95%/99% nadal
+wymagają pomiaru na poprawnie wyciętych polach i pełnym przepływie na
+telefonie. Szczególnie ważne jest rozdzielenie według układu: obu ujęć tej
+samej planszy nigdy nie wolno dzielić między trening i test.
+
+Wstępna diagnostyka istniejącego algorytmu wykrywania narożników (ta sama
+sekwencja: Canny, zamknięcie 15×15, największy wypukły czworokąt, na obrazach
+zmniejszonych jak w aplikacji) wykazała czworokąt o powierzchni ponad 20%
+kadru tylko na **1 z 22** nowych zdjęć. Dla pozostałych wzór pewności w
+aplikacji daje 0. To próba offline, nie test na Androidzie, lecz pokazuje, że
+bieżący detektor zewnętrznego prostokąta nie radzi sobie z rozdzielonymi
+kartami. Przed pomiarem jakości klasyfikatora trzeba rozwiązać wykrywanie
+poszczególnych kart lub ustalanie całej siatki z ich położeń.
+
+Nowe podejście i jego ograniczenia opisuje `DETECTION_REPORT.md`.

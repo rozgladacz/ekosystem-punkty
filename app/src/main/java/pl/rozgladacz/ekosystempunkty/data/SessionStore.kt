@@ -26,6 +26,7 @@ class SessionStore(private val context: Context) {
                 PlayerBoard(
                     id = item.getString("id"),
                     name = item.getString("name"),
+                    developmentGroupId = item.optString("developmentGroupId").takeIf { it.isNotBlank() },
                     grid = if (encodedGrid == null) BoardGrid.empty() else BoardGrid(
                         List(BoardGrid.CELL_COUNT) { cell ->
                             encodedGrid.optString(cell).takeIf { it.isNotBlank() }?.let(CardType::valueOf)
@@ -42,6 +43,7 @@ class SessionStore(private val context: Context) {
             array.put(JSONObject().apply {
                 put("id", player.id)
                 put("name", player.name)
+                player.developmentGroupId?.let { put("developmentGroupId", it) }
                 put("grid", JSONArray().apply {
                     player.grid.cells.forEach { put(it?.name ?: "") }
                 })

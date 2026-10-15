@@ -19,10 +19,18 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -98,11 +106,19 @@ private fun TableCell(
 @Composable
 fun SettingsScreen(
     updateState: UpdateUiState,
+    developmentMode: Boolean,
+    savedPhotoCount: Int,
+    developmentBusy: Boolean,
+    developmentMessage: String?,
     onCheck: () -> Unit,
     onDownload: (UpdateInfo) -> Unit,
     onInstall: (File) -> Unit,
+    onDevelopmentModeChange: (Boolean) -> Unit,
+    onExportDevelopment: () -> Unit,
+    onDeleteDevelopment: () -> Unit,
     onBack: () -> Unit,
 ) {
+    var confirmDeletion by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -111,7 +127,10 @@ fun SettingsScreen(
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Prywatność", style = MaterialTheme.typography.titleMedium)
-                Text("Zdjęcia są analizowane wyłącznie na urządzeniu i usuwane po zatwierdzeniu. Brak kont, chmury i telemetrii.")
+                Text(
+                    if (developmentMode) "Zdjęcia są analizowane lokalnie. W trybie rozwoju kopie pozostają na urządzeniu do ręcznego eksportu lub usunięcia. Brak kont, chmury i telemetrii."
+                    else "Zdjęcia są analizowane lokalnie i usuwane po zatwierdzeniu, chyba że zapisano je wcześniej w trybie rozwoju. Brak kont, chmury i telemetrii.",
+                )
             }
         }
         Card(Modifier.fillMaxWidth()) {
@@ -142,7 +161,47 @@ fun SettingsScreen(
                 ) { Text("Sprawdź aktualizacje") }
             }
         }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Tryb rozwoju", style = MaterialTheme.typography.titleMedium)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Zachowuj nowe zdjęcia", modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = developmentMode,
+                        onCheckedChange = onDevelopmentModeChange,
+                        enabled = !developmentBusy,
+                        modifier = Modifier.testTag("development-mode-switch"),
+                    )
+                }
+                Text("Domyślnie wyłączony. Zapisuje kopię każdego nowego ujęcia, także powtórzonego. Zatwierdzone układy dostają etykiety 20 kart; odrzucone zdjęcia pozostają bez etykiet.")
+                Text("Kopie są bez EXIF, nazw graczy, dat, lokalizacji i danych telefonu. Wyłączenie trybu nie usuwa już zapisanych zdjęć.")
+                Text("Zapisane zdjęcia: $savedPhotoCount")
+                Button(
+                    onClick = onExportDevelopment,
+                    enabled = savedPhotoCount > 0 && !developmentBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Eksportuj ZIP do wybranego pliku") }
+                OutlinedButton(
+                    onClick = { confirmDeletion = true },
+                    enabled = savedPhotoCount > 0 && !developmentBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Usuń zapisane zdjęcia") }
+                if (developmentBusy) Text("Przetwarzanie zapisanych zdjęć…")
+                developmentMessage?.let { Text(it) }
+            }
+        }
         Text("Nieoficjalna aplikacja pomocnicza. Nazwa i materiały gry należą do ich właścicieli.")
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Wróć") }
+    }
+    if (confirmDeletion) {
+        AlertDialog(
+            onDismissRequest = { confirmDeletion = false },
+            title = { Text("Usunąć materiał rozwojowy?") },
+            text = { Text("Wszystkie zapisane zdjęcia i etykiety zostaną trwale usunięte z aplikacji. Eksportowany wcześniej ZIP pozostanie w wybranym miejscu.") },
+            confirmButton = {
+                TextButton(onClick = { confirmDeletion = false; onDeleteDevelopment() }) { Text("Usuń") }
+            },
+            dismissButton = { TextButton(onClick = { confirmDeletion = false }) { Text("Anuluj") } },
+        )
     }
 }

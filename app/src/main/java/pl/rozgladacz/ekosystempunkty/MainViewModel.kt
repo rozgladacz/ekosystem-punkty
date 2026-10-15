@@ -9,10 +9,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import pl.rozgladacz.ekosystempunkty.data.SessionStore
+import pl.rozgladacz.ekosystempunkty.data.DevelopmentArchive
 import pl.rozgladacz.ekosystempunkty.domain.BoardGrid
 import pl.rozgladacz.ekosystempunkty.domain.CardType
 import pl.rozgladacz.ekosystempunkty.domain.GameScore
 import pl.rozgladacz.ekosystempunkty.domain.MultiPhotoFusion
+import pl.rozgladacz.ekosystempunkty.domain.NormalizedPoint
 import pl.rozgladacz.ekosystempunkty.domain.PlayerBoard
 import pl.rozgladacz.ekosystempunkty.domain.RecognitionCell
 import pl.rozgladacz.ekosystempunkty.domain.ScoreEngine
@@ -32,6 +34,8 @@ data class ReviewState(
     val cells: List<RecognitionCell>,
     val imageUris: List<Uri> = emptyList(),
     val shotCells: List<List<RecognitionCell>> = emptyList(),
+    val cornersByShot: List<List<NormalizedPoint>> = emptyList(),
+    val archiveIds: List<String?> = emptyList(),
     val manualOverrides: Map<Int, CardType> = emptyMap(),
 ) {
     val imageUri: Uri? get() = imageUris.lastOrNull()
@@ -58,13 +62,21 @@ data class AppUiState(
     val busy: Boolean = false,
     val error: String? = null,
     val update: UpdateUiState = UpdateUiState.Idle,
+    val captureGroupId: String? = null,
+    val captureShotCount: Int = 0,
+    val developmentMode: Boolean = false,
+    val developmentSaved: Int = 0,
+    val developmentBusy: Boolean = false,
+    val developmentMessage: String? = null,
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val store = SessionStore(application)
+    private val developmentArchive = DevelopmentArchive(application)
     private val recognizer by lazy { BoardRecognizer(application) }
     private val updateManager = UpdateManager(application)
-    private val mutableState = MutableStateFlow(AppUiState())
+    private val mutableState = MutableStateFlow(AppUiState(developmentMode = developmentArchive.enabled))
+    private val captureArchiveIds = mutableMapOf<String, String>()
     val state = mutableState.asStateFlow()
 
     init {
@@ -72,6 +84,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // przepływu, więc usuwamy ewentualne pliki pozostałe po awarii.
         File(application.cacheDir, "captures").listFiles()?.forEach { runCatching { it.delete() } }
         viewModelScope.launch {
+            mutableState.update { it.copy(developmentSaved = developmentArchive.count()) }
             val restored = store.load()
             if (!restored.isNullOrEmpty()) {
                 mutableState.update { it.copy(screen = AppScreen.PLAYERS, players = restored) }
@@ -88,13 +101,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 grid = BoardGrid.empty(),
             )
         }
-        mutableState.value = AppUiState(screen = AppScreen.PLAYERS, players = players)
+        val current = mutableState.value
+        mutableState.value = AppUiState(
+            screen = AppScreen.PLAYERS,
+            players = players,
+            developmentMode = current.developmentMode,
+            developmentSaved = current.developmentSaved,
+        )
         save(players)
     }
 
     fun capturePlayer(index: Int) {
         mutableState.update {
-            it.copy(screen = AppScreen.CAMERA, activePlayerIndex = index, review = null, cropProposal = null, error = null)
+            it.copy(
+                screen = AppScreen.CAMERA,
+                activePlayerIndex = index,
+                review = null,
+                cropProposal = null,
+                captureGroupId = UUID.randomUUID().toString(),
+                captureShotCount = 0,
+                error = null,
+            )
         }
     }
 
@@ -109,10 +136,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onPhotoCaptured(uri: Uri) {
-        mutableState.update { it.copy(busy = true, error = null) }
+        val shotIndex = mutableState.value.captureShotCount + 1
+        mutableState.update { it.copy(busy = true, error = null, captureShotCount = shotIndex) }
         viewModelScope.launch {
+            val snapshot = mutableState.value
+            val archiveResult = if (snapshot.developmentMode && snapshot.captureGroupId != null) {
+                runCatching { developmentArchive.savePhoto(uri, snapshot.captureGroupId, shotIndex) }
+            } else null
+            archiveResult?.onSuccess { id ->
+                captureArchiveIds[uri.toString()] = id
+                mutableState.update { it.copy(developmentSaved = developmentArchive.count()) }
+            }
+            val archiveWarning = archiveResult?.exceptionOrNull()?.let {
+                "Zdjęcie nie zostało zachowane do treningu: ${it.message ?: "błąd zapisu"}"
+            }
             runCatching { recognizer.detect(uri) }
-                .onSuccess { proposal -> mutableState.update { it.copy(screen = AppScreen.CROP, cropProposal = proposal, busy = false) } }
+                .onSuccess { proposal ->
+                    mutableState.update { it.copy(screen = AppScreen.CROP, cropProposal = proposal, busy = false, error = archiveWarning) }
+                }
                 .onFailure { error ->
                     deleteCapture(uri)
                     mutableState.update { it.copy(busy = false, error = error.message ?: "Nie udało się odczytać zdjęcia") }
@@ -138,6 +179,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 cells = MultiPhotoFusion.merge(shots, overrides),
                                 imageUris = previous?.imageUris.orEmpty() + proposal.imageUri,
                                 shotCells = shots,
+                                cornersByShot = previous?.cornersByShot.orEmpty() + listOf(proposal.corners),
+                                archiveIds = previous?.archiveIds.orEmpty() + listOf(captureArchiveIds[proposal.imageUri.toString()]),
                                 manualOverrides = overrides,
                             ),
                         )
@@ -161,25 +204,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val state = mutableState.value
         val review = state.review ?: return
         if (review.cells.any { it.type == null }) return
-        val updated = state.players.toMutableList().also { players ->
-            players[review.playerIndex] = players[review.playerIndex].copy(
-                grid = BoardGrid.complete(review.cells.map { requireNotNull(it.type) }),
-            )
+        val labels = review.cells.map { requireNotNull(it.type) }
+        mutableState.update { it.copy(busy = true) }
+        viewModelScope.launch {
+            val archiveResult = runCatching {
+                review.archiveIds.forEachIndexed { shot, id ->
+                    if (id != null) {
+                        developmentArchive.labelPhoto(
+                            id, labels, review.cornersByShot[shot],
+                            review.shotCells[shot].map { it.confidence }, review.manualOverrides.keys,
+                        )
+                    }
+                }
+                if (review.archiveIds.none { it != null }) {
+                    state.players[review.playerIndex].developmentGroupId?.let { groupId ->
+                        developmentArchive.updateLabeledGroup(groupId, labels)
+                    }
+                }
+            }
+            if (archiveResult.isFailure) {
+                mutableState.update {
+                    it.copy(busy = false, error = "Nie udało się zapisać etykiet zdjęć: ${archiveResult.exceptionOrNull()?.message}")
+                }
+                return@launch
+            }
+            val previousPlayer = state.players[review.playerIndex]
+            val updated = state.players.toMutableList().also { players ->
+                players[review.playerIndex] = previousPlayer.copy(
+                    grid = BoardGrid.complete(labels),
+                    developmentGroupId = if (review.archiveIds.any { it != null }) state.captureGroupId
+                        else previousPlayer.developmentGroupId,
+                )
+            }
+            review.imageUris.forEach { uri ->
+                deleteCapture(uri)
+                captureArchiveIds.remove(uri.toString())
+            }
+            val next = updated.indexOfFirst { !it.grid.isComplete }
+            val score = if (next < 0) ScoreEngine.score(updated) else null
+            mutableState.update {
+                it.copy(
+                    players = updated,
+                    review = null,
+                    cropProposal = null,
+                    score = score,
+                    busy = false,
+                    activePlayerIndex = next.coerceAtLeast(0),
+                    captureGroupId = if (next < 0) null else UUID.randomUUID().toString(),
+                    captureShotCount = 0,
+                    screen = if (next < 0) AppScreen.RESULTS else AppScreen.CAMERA,
+                )
+            }
+            save(updated)
         }
-        review.imageUris.forEach(::deleteCapture)
-        val next = updated.indexOfFirst { !it.grid.isComplete }
-        val score = if (next < 0) ScoreEngine.score(updated) else null
-        mutableState.update {
-            it.copy(
-                players = updated,
-                review = null,
-                cropProposal = null,
-                score = score,
-                activePlayerIndex = next.coerceAtLeast(0),
-                screen = if (next < 0) AppScreen.RESULTS else AppScreen.CAMERA,
-            )
-        }
-        save(updated)
     }
 
     fun editConfirmedBoard(index: Int) {
@@ -233,6 +310,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openSettings() {
         mutableState.update { it.copy(returnScreen = it.screen, screen = AppScreen.SETTINGS) }
+        viewModelScope.launch { mutableState.update { it.copy(developmentSaved = developmentArchive.count()) } }
     }
 
     fun closeSettings() {
@@ -271,8 +349,64 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val current = mutableState.value
         deleteCapture(current.cropProposal?.imageUri)
         current.review?.imageUris.orEmpty().forEach(::deleteCapture)
-        mutableState.value = AppUiState()
+        captureArchiveIds.clear()
+        mutableState.value = AppUiState(
+            developmentMode = current.developmentMode,
+            developmentSaved = current.developmentSaved,
+        )
         viewModelScope.launch { store.clear() }
+    }
+
+    fun setDevelopmentMode(enabled: Boolean) {
+        runCatching { developmentArchive.setEnabled(enabled) }
+            .onSuccess { mutableState.update { it.copy(developmentMode = enabled, developmentMessage = null) } }
+            .onFailure { error -> mutableState.update { it.copy(error = error.message ?: "Nie udało się zapisać ustawienia") } }
+    }
+
+    fun exportDevelopmentArchive(uri: Uri) {
+        mutableState.update { it.copy(developmentBusy = true, developmentMessage = null) }
+        viewModelScope.launch {
+            val result = runCatching { developmentArchive.exportTo(uri) }
+            mutableState.update {
+                it.copy(
+                    developmentBusy = false,
+                    developmentMessage = result.fold(
+                        onSuccess = { count -> "Wyeksportowano $count zdjęć do wybranego pliku ZIP." },
+                        onFailure = { error -> "Eksport nieudany: ${error.message ?: "błąd zapisu"}" },
+                    ),
+                )
+            }
+        }
+    }
+
+    fun deleteDevelopmentArchive() {
+        mutableState.update { it.copy(developmentBusy = true, developmentMessage = null) }
+        viewModelScope.launch {
+            val result = runCatching { developmentArchive.deleteAll() }
+            if (result.isSuccess) {
+                captureArchiveIds.clear()
+                val players = mutableState.value.players.map { it.copy(developmentGroupId = null) }
+                mutableState.update { state ->
+                    state.copy(
+                        players = players,
+                        review = state.review?.let { review ->
+                            review.copy(archiveIds = List(review.archiveIds.size) { null })
+                        },
+                    )
+                }
+                if (players.isNotEmpty()) save(players)
+            }
+            mutableState.update {
+                it.copy(
+                    developmentBusy = false,
+                    developmentSaved = if (result.isSuccess) 0 else it.developmentSaved,
+                    developmentMessage = result.fold(
+                        onSuccess = { "Usunięto zapisany materiał rozwojowy z urządzenia." },
+                        onFailure = { error -> "Nie udało się usunąć zdjęć: ${error.message ?: "błąd"}" },
+                    ),
+                )
+            }
+        }
     }
 
     fun clearError() {
