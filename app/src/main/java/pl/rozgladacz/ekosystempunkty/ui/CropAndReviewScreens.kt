@@ -53,10 +53,12 @@ import pl.rozgladacz.ekosystempunkty.ReviewState
 import pl.rozgladacz.ekosystempunkty.MainViewModel
 import pl.rozgladacz.ekosystempunkty.domain.BoardGrid
 import pl.rozgladacz.ekosystempunkty.domain.CardType
+import pl.rozgladacz.ekosystempunkty.domain.CardSuggestions
 import pl.rozgladacz.ekosystempunkty.domain.NormalizedPoint
 import pl.rozgladacz.ekosystempunkty.vision.BitmapLoader
 import pl.rozgladacz.ekosystempunkty.vision.CropProposal
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
 @Composable
 fun CropScreen(
@@ -180,6 +182,10 @@ fun ReviewScreen(
             if (missing == 0) "Dotknij pola, aby poprawić rozpoznaną kartę."
             else "Uzupełnij $missing nierozpoznanych pól. Dotknij każdego czerwonego pola.",
         )
+        Text("Model jest prototypowy. Sprawdź wszystkie karty przed zatwierdzeniem.", style = MaterialTheme.typography.bodySmall)
+        if (review.imageUris.isNotEmpty() && review.cells.all { it.probabilities.isEmpty() }) {
+            Text("Model nie jest dostępny na tym urządzeniu. Uzupełnij karty ręcznie.", color = MaterialTheme.colorScheme.error)
+        }
         if (review.imageUris.isNotEmpty()) {
             Text(
                 "Zdjęcia tego układu: ${review.imageUris.size}. Sprzeczne lub prześwietlone pola " +
@@ -240,19 +246,29 @@ fun ReviewScreen(
     }
 
     if (selectedIndex >= 0) {
+        val selectedCell = review.cells[selectedIndex]
         AlertDialog(
             onDismissRequest = { selectedIndex = -1 },
             title = { Text("Wybierz kartę") },
             text = {
                 LazyColumn(Modifier.heightIn(max = 480.dp)) {
-                    items(CardType.entries) { type ->
+                    if (selectedCell.probabilities.isNotEmpty()) {
+                        item { Text("Kolejność według modelu; wynik nie gwarantuje poprawności.") }
+                    }
+                    items(CardSuggestions.orderedTypes(selectedCell)) { type ->
+                        val score = selectedCell.probabilities.getOrNull(type.ordinal)
+                        val label = buildString {
+                            append(type.polishName)
+                            if (score != null) append(" · ${(score * 100).roundToInt()}%")
+                            if (type == selectedCell.type) append(" · wybrana")
+                        }
                         TextButton(
                             onClick = {
                                 onCardChanged(selectedIndex, type)
                                 selectedIndex = -1
                             },
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text(type.polishName) }
+                        ) { Text(label) }
                     }
                 }
             },

@@ -27,6 +27,17 @@ class SessionStore(private val context: Context) {
                     id = item.getString("id"),
                     name = item.getString("name"),
                     developmentGroupId = item.optString("developmentGroupId").takeIf { it.isNotBlank() },
+                    cardProbabilities = item.optJSONArray("cardProbabilities")?.let { scores ->
+                        if (scores.length() != BoardGrid.CELL_COUNT) emptyList() else {
+                            List(BoardGrid.CELL_COUNT) { cell ->
+                                scores.optJSONArray(cell)?.takeIf { it.length() == CardType.entries.size }?.let { row ->
+                                    List(CardType.entries.size) { type ->
+                                        row.optDouble(type, 0.0).toFloat().takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
+                                    }
+                                }.orEmpty()
+                            }
+                        }
+                    }.orEmpty(),
                     grid = if (encodedGrid == null) BoardGrid.empty() else BoardGrid(
                         List(BoardGrid.CELL_COUNT) { cell ->
                             encodedGrid.optString(cell).takeIf { it.isNotBlank() }?.let(CardType::valueOf)
@@ -44,6 +55,13 @@ class SessionStore(private val context: Context) {
                 put("id", player.id)
                 put("name", player.name)
                 player.developmentGroupId?.let { put("developmentGroupId", it) }
+                if (player.cardProbabilities.size == BoardGrid.CELL_COUNT) {
+                    put("cardProbabilities", JSONArray().apply {
+                        player.cardProbabilities.forEach { scores ->
+                            put(JSONArray().apply { scores.forEach { put(it.toDouble()) } })
+                        }
+                    })
+                }
                 put("grid", JSONArray().apply {
                     player.grid.cells.forEach { put(it?.name ?: "") }
                 })

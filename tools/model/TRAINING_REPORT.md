@@ -15,10 +15,10 @@ z wagami ImageNet i zamrożoną bazą; warstwę klasyfikacyjną uczono przez 20 
 
 Wersje INT8 ponadto nie inicjalizują się na standardowym interpreterze z
 delegatem XNNPACK na tym komputerze; wyniki podano z interpretera bez delegata.
-Kwantyzacja nie jest więc obecnie gotowa do użycia w aplikacji. Wariant FLOAT32
-działa na standardowym interpreterze i zachowuje trafność modelu źródłowego,
-ale nie został wdrożony. Modele i szczegółowe metryki pozostają wyłącznie w
-ignorowanym przez Git `training-data/model-prototype/`.
+Kwantyzacja nie jest więc obecnie gotowa do użycia w aplikacji. Na prośbę
+użytkownika wariant FLOAT32 dołączono do APK jako **eksperymentalny**. Wagi
+źródłowe i szczegółowe metryki pozostają w ignorowanym przez Git
+`training-data/model-prototype/`.
 
 Te liczby są **wynikiem prototypu**, nie potwierdzeniem wymaganych progów na
 nowych zdjęciach. Próbki z jednej planszy są skorelowane, a test obejmuje tylko
@@ -27,6 +27,5 @@ zdjęć, oceny odblasków po scaleniu ujęć ani działania na fizycznym telefon
 Ponowne dobieranie architektury według tego samego testu pozbawiłoby go
 niezależności — następna walidacja wymaga nowych, odłożonych zdjęć.
 
-Najbliższy krok techniczny: znaleźć przyczynę utraty jakości i błędu XNNPACK
-przy eksporcie INT8; następnie ocenić kandydat na nowych planszach i dopiero
-wtedy rozważyć umieszczenie modelu w APK.
+Najbliższy krok techniczny: ocenić cały przepływ na nowych planszach i
+fizycznym telefonie oraz znaleźć przyczynę utraty jakości przy eksporcie INT8.

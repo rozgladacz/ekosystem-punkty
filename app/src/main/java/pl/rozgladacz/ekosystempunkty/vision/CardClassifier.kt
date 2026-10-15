@@ -16,6 +16,7 @@ class CardClassifier(context: Context) : AutoCloseable {
     private val labels = context.assets.open("card_labels.txt").bufferedReader().useLines { lines ->
         lines.filter { it.isNotBlank() }.map(CardType::valueOf).toList()
     }
+    init { check(labels == CardType.entries.toList()) { "Kolejność etykiet modelu nie zgadza się z typami kart" } }
     private val interpreter: Interpreter? = runCatching {
         val descriptor = context.assets.openFd(MODEL_NAME)
         val model = FileInputStream(descriptor.fileDescriptor).channel.map(
@@ -51,9 +52,14 @@ class CardClassifier(context: Context) : AutoCloseable {
                 (raw - parameters.zeroPoint) * parameters.scale
             }
         }
-        val bestIndex = probabilities.indices.maxBy { probabilities[it] }
-        val confidence = probabilities[bestIndex].coerceIn(0f, 1f)
-        return RecognitionCell(labels[bestIndex].takeIf { confidence >= ACCEPT_THRESHOLD }, confidence)
+        val scores = probabilities.map { value -> if (value.isFinite()) value.coerceIn(0f, 1f) else 0f }
+        val bestIndex = scores.indices.maxBy { scores[it] }
+        val confidence = scores[bestIndex]
+        return RecognitionCell(
+            type = labels[bestIndex].takeIf { confidence >= ACCEPT_THRESHOLD },
+            confidence = confidence,
+            probabilities = scores,
+        )
     }
 
     private fun inputBuffer(bitmap: Bitmap, dataType: DataType): ByteBuffer {

@@ -65,15 +65,16 @@ python tools/model/train_model.py training-data/dataset-prototype training-data/
 python tools/model/evaluate_tflite.py training-data/dataset-prototype training-data/model-prototype/card_classifier.tflite
 ```
 
-Pierwszy skrypt zapisuje model Keras, metryki i model UINT8 224×224 wyłącznie
-poza aplikacją. Drugi mierzy rzeczywisty wynik wyeksportowanego TFLite, w tym
+Pierwszy skrypt zapisuje model Keras, metryki i model UINT8 224×224 poza
+aplikacją. Drugi mierzy rzeczywisty wynik wyeksportowanego TFLite, w tym
 precyzję automatycznych decyzji i liczbę całych plansz bez błędu. Do porównania
 bez kwantyzacji służy `export_float_tflite.py`; do kalibracji INT8 wszystkimi
 próbkami — `export_int8_tflite.py`. Wyniki pierwszego eksperymentu opisuje
 `TRAINING_REPORT.md`.
 
-Nie kopiuj modelu do `app/src/main/assets/` na podstawie samych metryk Keras.
-Eksport INT8 może mieć istotnie gorszą trafność i wymaga osobnej weryfikacji.
-Przed wydaniem potrzebna jest także kontrola całego przepływu na telefonie,
-walidacja wykrywania siatki oraz sprawdzenie prawa do dystrybucji wag.
+W APK umieszczono wyłącznie oceniony wariant FLOAT32. Nie zastępuj go wariantem
+INT8 na podstawie samych metryk Keras: eksport INT8 miał istotnie gorszą
+trafność. Model w APK pozostaje prototypem; przed uznaniem jego skuteczności
+potrzebna jest kontrola całego przepływu na nowych planszach i fizycznym
+telefonie oraz odrębna ocena praw do wag przy dalszej dystrybucji.
 

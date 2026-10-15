@@ -194,7 +194,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         mutableState.update { state ->
             val review = state.review ?: return@update state
             state.copy(review = review.copy(
-                cells = review.cells.toMutableList().also { it[index] = RecognitionCell(type, 1f) },
+                cells = review.cells.toMutableList().also { it[index] = it[index].copy(type = type, confidence = 1f) },
                 manualOverrides = review.manualOverrides + (index to type),
             ))
         }
@@ -212,7 +212,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (id != null) {
                         developmentArchive.labelPhoto(
                             id, labels, review.cornersByShot[shot],
-                            review.shotCells[shot].map { it.confidence }, review.manualOverrides.keys,
+                            review.shotCells[shot].map { it.confidence },
+                            review.shotCells[shot].map { it.probabilities },
+                            review.manualOverrides.keys,
                         )
                     }
                 }
@@ -232,6 +234,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val updated = state.players.toMutableList().also { players ->
                 players[review.playerIndex] = previousPlayer.copy(
                     grid = BoardGrid.complete(labels),
+                    cardProbabilities = review.cells.map { it.probabilities },
                     developmentGroupId = if (review.archiveIds.any { it != null }) state.captureGroupId
                         else previousPlayer.developmentGroupId,
                 )
@@ -265,7 +268,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(
                 screen = AppScreen.REVIEW,
                 activePlayerIndex = index,
-                review = ReviewState(index, player.grid.cells.map { type -> RecognitionCell(type, 1f) }),
+                review = ReviewState(index, player.grid.cells.mapIndexed { cellIndex, type ->
+                    RecognitionCell(type, 1f, probabilities = player.cardProbabilities.getOrNull(cellIndex).orEmpty())
+                }),
             )
         }
     }

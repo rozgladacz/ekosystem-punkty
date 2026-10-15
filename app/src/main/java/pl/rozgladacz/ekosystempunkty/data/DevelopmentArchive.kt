@@ -80,9 +80,11 @@ class DevelopmentArchive(
         labels: List<CardType>,
         corners: List<NormalizedPoint>,
         confidences: List<Float>,
+        classProbabilities: List<List<Float>>,
         manuallyCorrectedIndices: Set<Int>,
     ) = withContext(Dispatchers.IO) {
-        require(labels.size == 20 && corners.size == 4 && confidences.size == 20)
+        require(labels.size == 20 && corners.size == 4 && confidences.size == 20 && classProbabilities.size == 20)
+        require(classProbabilities.all { it.isEmpty() || it.size == CardType.entries.size })
         val metadata = readRecord(id)
         metadata.put("status", "labeled")
         metadata.put("labels", JSONArray().apply { labels.forEach { put(it.name) } })
@@ -90,6 +92,11 @@ class DevelopmentArchive(
             corners.forEach { point -> put(JSONArray().put(point.x.toDouble()).put(point.y.toDouble())) }
         })
         metadata.put("recognition_confidence", JSONArray().apply { confidences.forEach { put(it.toDouble()) } })
+        metadata.put("class_probabilities", JSONArray().apply {
+            classProbabilities.forEach { scores ->
+                put(JSONArray().apply { scores.forEach { put(it.toDouble()) } })
+            }
+        })
         metadata.put("manually_corrected_indices", JSONArray().apply {
             manuallyCorrectedIndices.sorted().forEach(::put)
         })
@@ -143,10 +150,14 @@ class DevelopmentArchive(
                 add("metadata/${record.name}", record)
                 add("images/${image.name}", image)
             }
+            zip.putNextEntry(ZipEntry("card_labels.txt").apply { time = 0L })
+            zip.write((CardType.entries.joinToString("\n") { it.name } + "\n").toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
             zip.putNextEntry(ZipEntry("README.txt").apply { time = 0L })
             zip.write(
                 ("Ekosystem Punkty - material rozwojowy\n" +
                     "Pary laczy group_id. status=labeled oznacza potwierdzone 20 kart.\n" +
+                    "class_probabilities: 20 pol x 11 klas w kolejnosci card_labels.txt.\n" +
                     "Nie ma nazw graczy, dat, lokalizacji ani EXIF.\n").toByteArray(Charsets.UTF_8),
             )
             zip.closeEntry()

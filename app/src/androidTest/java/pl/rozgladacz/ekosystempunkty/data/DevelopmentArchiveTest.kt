@@ -52,17 +52,22 @@ class DevelopmentArchiveTest {
                 NormalizedPoint(.1f, .1f), NormalizedPoint(.9f, .1f),
                 NormalizedPoint(.9f, .9f), NormalizedPoint(.1f, .9f),
             )
-            archive.labelPhoto(id, labels, corners, List(20) { .8f }, setOf(3))
+            archive.labelPhoto(
+                id, labels, corners, List(20) { .8f },
+                List(20) { List(CardType.entries.size) { .1f } }, setOf(3),
+            )
             archive.updateLabeledGroup(group, labels.toMutableList().also { it[4] = CardType.FOX })
             assertEquals(1, archive.exportTo(Uri.fromFile(exported)))
             ZipFile(exported).use { zip ->
                 assertNotNull(zip.getEntry("images/$id.jpg"))
+                assertNotNull(zip.getEntry("card_labels.txt"))
                 val metadata = zip.getInputStream(zip.getEntry("metadata/$id.json"))
                     .bufferedReader().use { JSONObject(it.readText()) }
                 assertEquals("labeled", metadata.getString("status"))
                 assertEquals(group, metadata.getString("group_id"))
                 assertEquals("FOX", metadata.getJSONArray("labels").getString(4))
                 assertTrue(metadata.getJSONArray("manually_corrected_indices").toString().contains("4"))
+                assertEquals(CardType.entries.size, metadata.getJSONArray("class_probabilities").getJSONArray(0).length())
                 assertFalse(metadata.has("player_name"))
                 assertFalse(metadata.has("captured_at"))
                 assertFalse(metadata.has("location"))

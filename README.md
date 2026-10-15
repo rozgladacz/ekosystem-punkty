@@ -42,8 +42,9 @@ W archiwum każdemu `images/<capture_id>.jpg` odpowiada
 zatwierdzoną. Tablica `labels` ma 20 pól w kolejności wierszowej (4 wiersze
 po 5 kolumn); `corners` zawiera kolejno lewy górny, prawy górny, prawy dolny
 i lewy dolny narożnik jako współrzędne znormalizowane. Metadane obejmują też
-rozmiar obrazu, SHA-256, pewności klasyfikatora i indeksy pól poprawionych
-ręcznie. Archiwum można przenieść np. kablem USB; aplikacja nigdy nie przesyła
+rozmiar obrazu, SHA-256, wyniki modelu dla wszystkich 11 typów kart,
+pewności klasyfikatora i indeksy pól poprawionych ręcznie. Archiwum można
+przenieść np. kablem USB; aplikacja nigdy nie przesyła
 go samodzielnie.
 
 ## Budowanie
@@ -60,12 +61,14 @@ APK debug powstaje w `app/build/outputs/apk/debug/`.
 
 ## Model kart
 
-Repozytorium nie zawiera zdjęć ani gotowego modelu, dopóki nie zostanie
-przygotowany z materiałów właściciela gry. Bez pliku
-`app/src/main/assets/card_classifier.tflite` aplikacja celowo oznacza pola jako
-nierozpoznane i umożliwia ich ręczne uzupełnienie. Proces przygotowania danych i
-modelu opisuje [`tools/model/README.md`](tools/model/README.md).
-Wynik pierwszego, niewdrożonego treningu opisuje
+Repozytorium zawiera eksperymentalny model FLOAT32 MobileNetV3-Small, ale nie
+zawiera zdjęć źródłowych. Rozpoznanie pojedynczych kart jest tylko sugestią:
+próg automatycznego przyjęcia wynosi 0,85, a użytkownik powinien sprawdzić
+wszystkie 20 pól. Wybór ręczny pokazuje typy w kolejności wyników modelu,
+również dla pola odrzuconego przez próg. Ranking jest zachowywany przy korekcie
+bieżącej partii. Proces przygotowania danych opisuje
+[`tools/model/README.md`](tools/model/README.md), a pochodzenie modelu
+[`MODEL_INFO.md`](app/src/main/assets/MODEL_INFO.md). Wynik prototypowego treningu opisuje
 [`tools/model/TRAINING_REPORT.md`](tools/model/TRAINING_REPORT.md).
 
 ## Wydania

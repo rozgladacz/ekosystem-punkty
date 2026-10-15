@@ -41,12 +41,15 @@ data class PlayerBoard(
     val name: String,
     val grid: BoardGrid,
     val developmentGroupId: String? = null,
+    val cardProbabilities: List<List<Float>> = emptyList(),
 )
 
 data class RecognitionCell(
     val type: CardType?,
     val confidence: Float,
     val visualQuality: Float = 1f,
+    /** Model scores in [CardType.entries] order; retained even below the acceptance threshold. */
+    val probabilities: List<Float> = emptyList(),
 )
 
 data class NormalizedPoint(val x: Float, val y: Float)

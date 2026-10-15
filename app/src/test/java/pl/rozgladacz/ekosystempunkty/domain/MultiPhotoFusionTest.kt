@@ -48,4 +48,24 @@ class MultiPhotoFusionTest {
         val result = MultiPhotoFusion.merge(listOf(first, second), mapOf(5 to CardType.DRAGONFLY))
         assertEquals(CardType.DRAGONFLY, result[5].type)
     }
+
+    @Test
+    fun unresolvedCellKeepsScoresForManualRanking() {
+        val scores = MutableList(CardType.entries.size) { 0f }.also {
+            it[CardType.FOX.ordinal] = .55f
+            it[CardType.DEER.ordinal] = .45f
+        }
+        val result = MultiPhotoFusion.merge(listOf(shot(4 to RecognitionCell(null, .55f, probabilities = scores))))
+        assertNull(result[4].type)
+        assertEquals(CardType.FOX, CardSuggestions.orderedTypes(result[4]).first())
+    }
+
+    @Test
+    fun clearPhotoSuppliesRankingWhenOtherPhotoHasGlare() {
+        fun scores(type: CardType): List<Float> = MutableList(CardType.entries.size) { 0f }.also { it[type.ordinal] = 1f }
+        val glare = shot(8 to RecognitionCell(CardType.BEAR, .99f, .2f, scores(CardType.BEAR)))
+        val clear = shot(8 to RecognitionCell(CardType.WOLF, .92f, .95f, scores(CardType.WOLF)))
+        val merged = MultiPhotoFusion.merge(listOf(glare, clear))[8]
+        assertEquals(CardType.WOLF, CardSuggestions.orderedTypes(merged).first())
+    }
 }
