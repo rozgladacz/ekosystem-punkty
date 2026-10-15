@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import org.junit.Rule
 import org.junit.Test
 
@@ -27,7 +28,7 @@ class MainActivityTest {
     fun updatesAreExplicitlyManual() {
         rule.onNodeWithText("Ustawienia").performClick()
         rule.onNodeWithText("Aplikacja nigdy nie sprawdza aktualizacji automatycznie.").assertIsDisplayed()
-        rule.onNodeWithText("Sprawdź aktualizacje").assertIsDisplayed()
+        rule.onNodeWithText("Sprawdź aktualizacje").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -36,10 +37,12 @@ class MainActivityTest {
             .getBoolean("enabled", false)
         rule.onNodeWithText("Ustawienia").performClick()
         val toggle = rule.onNodeWithTag("development-mode-switch")
+        toggle.performScrollTo().assertIsDisplayed()
         if (initiallyEnabled) toggle.assertIsOn() else toggle.assertIsOff()
         toggle.performClick()
         if (initiallyEnabled) toggle.assertIsOff() else toggle.assertIsOn()
-        rule.onNodeWithText("Sprawdź aktualizacje").assertIsDisplayed()
+        rule.onNodeWithText("Sprawdź aktualizacje").performScrollTo().assertIsDisplayed()
+        toggle.performScrollTo().assertIsDisplayed()
         toggle.performClick()
         if (initiallyEnabled) toggle.assertIsOn() else toggle.assertIsOff()
     }
