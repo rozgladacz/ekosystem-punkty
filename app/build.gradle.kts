@@ -98,7 +98,11 @@ dependencies {
     implementation("androidx.camera:camera-view:1.5.3")
     implementation("androidx.exifinterface:exifinterface:1.4.1")
     implementation("org.opencv:opencv:4.12.0")
-    implementation("com.google.ai.edge.litert:litert:2.1.1")
+    // The model is bundled in assets. Play AI Delivery is unused and pulls in
+    // WorkManager, whose auto-initializer crashes the minified release on API 33.
+    implementation("com.google.ai.edge.litert:litert:2.1.1") {
+        exclude(group = "com.google.android.play", module = "ai-delivery")
+    }
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     testImplementation("junit:junit:4.13.2")

@@ -75,6 +75,13 @@ jobs:
           printf 'storeFile=.signing/release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > keystore.properties
       - name: Build signed APK
         run: ./gradlew assembleRelease -PversionCode=${{ github.run_number }} -PversionName=0.1.${{ github.run_number }}
+      - name: Reject unused WorkManager auto-initialization
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          if "$ANDROID_HOME/build-tools/36.0.0/aapt" dump xmltree "$APK" AndroidManifest.xml | grep -q 'androidx.work.WorkManagerInitializer'; then
+            echo 'Unexpected WorkManager initializer in the release APK' >&2
+            exit 1
+          fi
       - name: Verify package and prepare update manifest
         env:
           VERSION_CODE: ${{ github.run_number }}
