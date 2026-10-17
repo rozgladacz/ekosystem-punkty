@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -88,7 +90,6 @@ fun CameraScreen(
                 modifier = Modifier.fillMaxSize(),
             )
             DisposableEffect(Unit) { onDispose { cameraProvider?.unbindAll() } }
-            GridGuide()
         } else {
             Column(
                 Modifier.align(Alignment.Center).padding(24.dp),
@@ -101,15 +102,50 @@ fun CameraScreen(
         }
 
         Column(
-            Modifier.fillMaxWidth().align(Alignment.TopCenter).background(Color.Black.copy(alpha = 0.65f)).padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding(),
         ) {
-            Text(playerName, color = Color.White, style = MaterialTheme.typography.titleLarge)
-            Text(
-                if (completedPhotos == 0) "Umieść wszystkie 20 kart wewnątrz prowadnicy"
-                else "Dodatkowe zdjęcie ${completedPhotos + 1}/4: nie przesuwaj kart; zmień kąt, by ominąć odblask",
-                color = Color.White,
-            )
+            Column(
+                Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.65f)).padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(playerName, color = Color.White, style = MaterialTheme.typography.titleLarge)
+                Text(
+                    if (completedPhotos == 0) "Umieść wszystkie 20 kart wewnątrz prowadnicy"
+                    else "Dodatkowe zdjęcie ${completedPhotos + 1}/4: nie przesuwaj kart; zmień kąt, by ominąć odblask",
+                    color = Color.White,
+                )
+            }
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                if (permissionGranted) GridGuide()
+            }
+            Row(
+                Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.65f)).padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Anuluj", color = Color.White) }
+                Button(
+                    enabled = permissionGranted,
+                    onClick = {
+                        val directory = File(context.cacheDir, "captures").apply { mkdirs() }
+                        val file = File(directory, "${UUID.randomUUID()}.jpg")
+                        imageCapture.takePicture(
+                            ImageCapture.OutputFileOptions.Builder(file).build(),
+                            ContextCompat.getMainExecutor(context),
+                            object : ImageCapture.OnImageSavedCallback {
+                                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                                    onCaptured(Uri.fromFile(file))
+                                }
+
+                                override fun onError(exception: ImageCaptureException) {
+                                    file.delete()
+                                    error = exception.message ?: "Nie udało się zrobić zdjęcia"
+                                }
+                            },
+                        )
+                    },
+                    modifier = Modifier.weight(2f),
+                ) { Text("Zrób zdjęcie") }
+            }
         }
 
         error?.let {
@@ -119,43 +155,14 @@ fun CameraScreen(
                 modifier = Modifier.align(Alignment.Center).background(Color.White).padding(12.dp),
             )
         }
-
-        Row(
-            Modifier.fillMaxWidth().align(Alignment.BottomCenter).background(Color.Black.copy(alpha = 0.65f)).padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Anuluj", color = Color.White) }
-            Button(
-                enabled = permissionGranted,
-                onClick = {
-                    val directory = File(context.cacheDir, "captures").apply { mkdirs() }
-                    val file = File(directory, "${UUID.randomUUID()}.jpg")
-                    imageCapture.takePicture(
-                        ImageCapture.OutputFileOptions.Builder(file).build(),
-                        ContextCompat.getMainExecutor(context),
-                        object : ImageCapture.OnImageSavedCallback {
-                            override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                                onCaptured(Uri.fromFile(file))
-                            }
-
-                            override fun onError(exception: ImageCaptureException) {
-                                file.delete()
-                                error = exception.message ?: "Nie udało się zrobić zdjęcia"
-                            }
-                        },
-                    )
-                },
-                modifier = Modifier.weight(2f),
-            ) { Text("Zrób zdjęcie") }
-        }
     }
 }
 
 @Composable
 private fun GridGuide() {
     Canvas(Modifier.fillMaxSize()) {
-        val maximumWidth = size.width * 0.88f
-        val maximumHeight = size.height * 0.68f
+        val maximumWidth = size.width * 0.92f
+        val maximumHeight = size.height * 0.92f
         val expectedRatio = 5f * 63f / (4f * 88f)
         val width = minOf(maximumWidth, maximumHeight * expectedRatio)
         val height = width / expectedRatio

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -30,7 +31,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -70,7 +70,7 @@ fun CropScreen(
     val bitmap = rememberPreviewBitmap(proposal.imageUri.toString())
     var corners by remember(proposal) { mutableStateOf(proposal.corners) }
     Column(
-        Modifier.fillMaxSize().background(Color.Black).padding(16.dp),
+        Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Ustaw narożniki układu", color = Color.White, style = MaterialTheme.typography.headlineSmall)
@@ -278,14 +278,15 @@ fun ReviewScreen(
 }
 
 @Composable
-private fun rememberPreviewBitmap(uri: String): Bitmap? {
+internal fun rememberPreviewBitmap(uri: String): Bitmap? {
     val context = LocalContext.current
     val bitmap by produceState<Bitmap?>(null, uri) {
         value = withContext(Dispatchers.IO) {
             runCatching { BitmapLoader.load(context, android.net.Uri.parse(uri), maximumSide = 1400) }.getOrNull()
         }
     }
-    DisposableEffect(bitmap) { onDispose { bitmap?.recycle() } }
+    // Compose may still draw the previous frame after this composable leaves the
+    // composition. Let GC reclaim the bitmap when no Image retains it.
     return bitmap
 }
 
