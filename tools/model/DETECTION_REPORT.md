@@ -38,3 +38,29 @@ Kompilacja debug, testy jednostkowe i dwa testy detektora na emulatorze
 Android 13 przeszły. Test emulatora użył syntetycznej siatki i pustego obrazu;
 nie zastępuje testu pełnych zdjęć na Androidzie. Model FLOAT32 użyty w próbie
 pozostaje poza aplikacją, a model INT8 nadal nie nadaje się do wdrożenia.
+
+## Uzupełnienie — 18 października 2026
+
+Pięć kolejnych układów (10 ujęć w `Zdjecia/Nowe/`) ujawniło, że projekcja
+krawędzi całego kadru nadal bywa ściągana przez deski podłogi, krawędź stołu,
+pudełko lub krzesło. Same kontury kart są zbyt niestabilne: dotychczasowy
+filtr znalazł tylko 1–6 z 20 kart na poszczególnych nowych fotografiach.
+
+`BoardLocator` analizuje teraz dodatkowo lokalną wariancję luminancji w
+oknach 25×25 na obrazie do 600×800. Zwarty obszar ilustracji daje propozycję
+granic planszy. Granice są dostrajane kontrastem tekstury wewnątrz i na
+zewnątrz; słabe skraje można poszerzyć, jeśli przerwa pomiędzy kartami
+została wzięta za koniec układu. Kandydat jest wybierany tylko przy dostatecznym
+kontraście co najmniej trzech boków i przewadze nad dawną propozycją.
+W przeciwnym razie zostaje poprzednia metoda. Kadr nadal wymaga potwierdzenia
+przez użytkownika, a stopień pewności nie jest podnoszony do progu bez ostrzeżenia.
+
+Na emulatorze API 33 test z dziesięcioma prywatnymi zdjęciami przeszedł:
+każda z czterech granic propozycji mieściła się w tolerancji 5,5% wymiaru
+obrazu względem wizualnie oszacowanego położenia planszy. To **test
+rozwojowy na zdjęciach użytych do strojenia**, nie niezależna miara trafności.
+Dodatkowy test syntetyczny obejmuje silne krawędzie tła i słabo wyróżniający
+się ostatni rząd. Wizualne porównanie z 22 wcześniejszymi ujęciami nie wykazało
+jednoznacznej regresji; w trudnych przypadkach detektor zachowuje stary wariant.
+Nadal potrzebna jest kontrola na fizycznym telefonie i niezależnych zdjęciach
+przed potwierdzeniem celu 95% pełnych siatek.

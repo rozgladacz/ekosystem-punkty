@@ -46,6 +46,43 @@ class BoardLocatorTest {
         bitmap.recycle()
     }
 
+    @Test
+    fun ignoresBackgroundEdgesAndDistractingObjects() {
+        val bitmap = Bitmap.createBitmap(1200, 1600, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(Color.rgb(183, 151, 117))
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        // Strong outer edges used to pull the previous whole-image projection
+        // away from the actual card group.
+        paint.color = Color.rgb(40, 35, 30)
+        canvas.drawRect(0f, 0f, 370f, 160f, paint)
+        canvas.drawRect(940f, 1410f, 1200f, 1600f, paint)
+        paint.strokeWidth = 3f
+        paint.color = Color.rgb(105, 82, 65)
+        for (line in 0..8) canvas.drawLine(0f, line * 190f, 1200f, line * 190f, paint)
+
+        for (row in 0 until 4) {
+            for (column in 0 until 5) {
+                val left = 160f + column * 174f
+                val top = 325f + row * 239f
+                paint.color = Color.rgb(35 + column * 22, 80 + row * 28, 155 + column * 12)
+                canvas.drawRoundRect(left, top, left + 150f, top + 214f, 7f, 7f, paint)
+                paint.color = Color.rgb(230 - row * 16, 213 - column * 13, 65 + row * 20)
+                for (stripe in 0..8) {
+                    val y = top + 15f + stripe * 22f
+                    canvas.drawLine(left + 12f, y, left + 138f, y + 12f, paint)
+                }
+            }
+        }
+
+        val result = BoardLocator.locate(bitmap)
+        assertEquals(160f / 1200f, result.corners[0].x, .055f)
+        assertEquals(325f / 1600f, result.corners[0].y, .055f)
+        assertEquals(1006f / 1200f, result.corners[2].x, .055f)
+        assertEquals(1256f / 1600f, result.corners[2].y, .055f)
+        bitmap.recycle()
+    }
+
     companion object {
         @BeforeClass @JvmStatic
         fun loadOpenCv() {
