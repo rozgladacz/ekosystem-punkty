@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -57,7 +58,6 @@ import pl.rozgladacz.ekosystempunkty.domain.CardSuggestions
 import pl.rozgladacz.ekosystempunkty.domain.NormalizedPoint
 import pl.rozgladacz.ekosystempunkty.vision.BitmapLoader
 import pl.rozgladacz.ekosystempunkty.vision.CropProposal
-import kotlin.math.pow
 import kotlin.math.roundToInt
 
 @Composable
@@ -69,6 +69,7 @@ fun CropScreen(
 ) {
     val bitmap = rememberPreviewBitmap(proposal.imageUri.toString())
     var corners by remember(proposal) { mutableStateOf(proposal.corners) }
+    var activeCorner by remember(proposal) { mutableIntStateOf(-1) }
     Column(
         Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -96,27 +97,38 @@ fun CropScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
                 Canvas(
-                    Modifier.fillMaxSize().pointerInput(corners) {
+                    Modifier.fillMaxSize().testTag("crop-grid").pointerInput(proposal) {
                         var active = -1
+                        var draggedCorners = corners
                         detectDragGestures(
                             onDragStart = { position ->
-                                active = corners.indices.minBy { index ->
-                                    val point = Offset(corners[index].x * size.width, corners[index].y * size.height)
-                                    (point.x - position.x).pow(2) + (point.y - position.y).pow(2)
+                                val hitRadius = 48.dp.toPx()
+                                val nearest = corners.indices.minByOrNull { index ->
+                                    val dx = corners[index].x * size.width - position.x
+                                    val dy = corners[index].y * size.height - position.y
+                                    dx * dx + dy * dy
                                 }
+                                active = nearest?.takeIf { index ->
+                                    val dx = corners[index].x * size.width - position.x
+                                    val dy = corners[index].y * size.height - position.y
+                                    dx * dx + dy * dy <= hitRadius * hitRadius
+                                } ?: -1
+                                draggedCorners = corners
+                                activeCorner = active
                             },
-                            onDragEnd = { active = -1 },
-                            onDragCancel = { active = -1 },
+                            onDragEnd = { active = -1; activeCorner = -1 },
+                            onDragCancel = { active = -1; activeCorner = -1 },
                             onDrag = { change, drag ->
                                 if (active >= 0) {
                                     change.consume()
-                                    corners = corners.toMutableList().also { list ->
+                                    draggedCorners = draggedCorners.toMutableList().also { list ->
                                         val previous = list[active]
                                         list[active] = NormalizedPoint(
                                             (previous.x + drag.x / size.width).coerceIn(0f, 1f),
                                             (previous.y + drag.y / size.height).coerceIn(0f, 1f),
                                         )
                                     }
+                                    corners = draggedCorners
                                 }
                             },
                         )
@@ -145,8 +157,9 @@ fun CropScreen(
                     }
                     points.indices.forEach { index ->
                         drawLine(Color(0xFF9CFFB5), points[index], points[(index + 1) % points.size], 5f)
-                        drawCircle(Color.White, 22f, points[index])
-                        drawCircle(Color(0xFF176B3A), 16f, points[index], style = Stroke(6f))
+                        val selected = index == activeCorner
+                        drawCircle(if (selected) Color(0xFFFFD54F) else Color.White, if (selected) 26.dp.toPx() else 19.dp.toPx(), points[index])
+                        drawCircle(Color(0xFF176B3A), if (selected) 21.dp.toPx() else 15.dp.toPx(), points[index], style = Stroke(3.dp.toPx()))
                     }
                 }
             }
