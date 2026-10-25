@@ -47,6 +47,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -186,14 +188,18 @@ fun ReviewScreen(
 ) {
     var selectedIndex by remember { mutableIntStateOf(-1) }
     val missing = review.cells.count { it.type == null }
+    val toReview = review.cells.count { it.needsReview }
     Column(
         Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text("Sprawdź: $playerName", style = MaterialTheme.typography.headlineSmall)
         Text(
-            if (missing == 0) "Dotknij pola, aby poprawić rozpoznaną kartę."
-            else "Uzupełnij $missing nierozpoznanych pól. Dotknij każdego czerwonego pola.",
+            when {
+                missing > 0 -> "Uzupełnij $missing nierozpoznanych pól. Dotknij każdego pustego pola."
+                toReview > 0 -> "Do sprawdzenia: $toReview pól zaznaczonych na czerwono. Najlepsze propozycje są już wpisane."
+                else -> "Dotknij pola, aby poprawić rozpoznaną kartę."
+            },
         )
         Text("Model jest prototypowy. Sprawdź wszystkie karty przed zatwierdzeniem.", style = MaterialTheme.typography.bodySmall)
         if (review.imageUris.isNotEmpty() && review.cells.all { it.probabilities.isEmpty() }) {
@@ -224,10 +230,12 @@ fun ReviewScreen(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             itemsIndexed(review.cells) { index, cell ->
-                val uncertain = cell.type == null || cell.confidence < 0.85f
+                val uncertain = cell.needsReview
                 OutlinedButton(
                     onClick = { selectedIndex = index },
-                    modifier = Modifier.height(72.dp).border(
+                    modifier = Modifier.height(72.dp).semantics {
+                        stateDescription = if (uncertain) "Do sprawdzenia" else "Rozpoznana"
+                    }.border(
                         width = if (uncertain) 2.dp else 0.dp,
                         color = if (uncertain) MaterialTheme.colorScheme.error else Color.Transparent,
                         shape = MaterialTheme.shapes.small,

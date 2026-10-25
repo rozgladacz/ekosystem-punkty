@@ -56,7 +56,7 @@ class CardClassifier(context: Context) : AutoCloseable {
         val bestIndex = scores.indices.maxBy { scores[it] }
         val confidence = scores[bestIndex]
         return RecognitionCell(
-            type = labels[bestIndex].takeIf { confidence >= ACCEPT_THRESHOLD },
+            type = labels[bestIndex].takeIf { confidence > 0f },
             confidence = confidence,
             probabilities = scores,
         )
@@ -90,7 +90,6 @@ class CardClassifier(context: Context) : AutoCloseable {
     companion object {
         private const val MODEL_NAME = "card_classifier.tflite"
         private const val INPUT_SIZE = 224
-        private const val ACCEPT_THRESHOLD = 0.85f
     }
 }
 

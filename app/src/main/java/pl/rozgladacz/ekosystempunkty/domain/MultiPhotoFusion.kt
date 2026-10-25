@@ -2,7 +2,6 @@ package pl.rozgladacz.ekosystempunkty.domain
 
 /** Łączy odpowiadające sobie pola kilku zdjęć tego samego, niezmienionego układu. */
 object MultiPhotoFusion {
-    private const val MIN_CONFIDENCE = 0.85f
     private const val MIN_VISUAL_QUALITY = 0.65f
 
     fun merge(
@@ -25,7 +24,7 @@ object MultiPhotoFusion {
                 }
             }
             val usable = observations.filter {
-                it.type != null && it.confidence >= MIN_CONFIDENCE &&
+                it.type != null && it.confidence >= RecognitionCell.HIGH_CONFIDENCE &&
                     it.visualQuality >= MIN_VISUAL_QUALITY
             }
             val types = usable.mapNotNull { it.type }.toSet()
@@ -33,10 +32,23 @@ object MultiPhotoFusion {
                 val best = usable.maxBy { it.confidence * it.visualQuality }
                 RecognitionCell(best.type, best.confidence, best.visualQuality, probabilities)
             } else {
-                // Brak wiarygodnego ujęcia albo sprzeczne odczyty: decyzja należy do użytkownika.
-                RecognitionCell(null, 0f, probabilities = probabilities)
+                // Keep the best suggestion visible, while glare or disagreement
+                // still requires review even if its numerical score is high.
+                val bestIndex = probabilities.indices.maxByOrNull { probabilities[it] }
+                    ?.takeIf { probabilities[it].isFinite() && probabilities[it] > 0f }
+                val bestObservation = observations.filter {
+                    it.type != null && it.confidence.isFinite() && it.confidence > 0f
+                }.maxByOrNull { it.confidence * it.visualQuality }
+                RecognitionCell(
+                    type = bestIndex?.let { CardType.entries[it] } ?: bestObservation?.type,
+                    confidence = bestIndex?.let { probabilities[it] } ?: bestObservation?.confidence ?: 0f,
+                    visualQuality = rankingSources.maxOfOrNull { it.visualQuality }
+                        ?: bestObservation?.visualQuality ?: 1f,
+                    probabilities = probabilities,
+                    reviewRequired = true,
+                )
             }
-            manualOverrides[index]?.let { merged.copy(type = it, confidence = 1f) } ?: merged
+            manualOverrides[index]?.let { merged.copy(type = it, confidence = 1f, reviewRequired = false) } ?: merged
         }
     }
 }

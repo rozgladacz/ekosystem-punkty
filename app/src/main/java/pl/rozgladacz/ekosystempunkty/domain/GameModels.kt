@@ -50,7 +50,16 @@ data class RecognitionCell(
     val visualQuality: Float = 1f,
     /** Model scores in [CardType.entries] order; retained even below the acceptance threshold. */
     val probabilities: List<Float> = emptyList(),
-)
+    /** Also flags glare or conflicting shots when the selected suggestion has a high score. */
+    val reviewRequired: Boolean = false,
+) {
+    val needsReview: Boolean get() =
+        reviewRequired || type == null || !confidence.isFinite() || confidence < HIGH_CONFIDENCE
+
+    companion object {
+        const val HIGH_CONFIDENCE = .85f
+    }
+}
 
 data class NormalizedPoint(val x: Float, val y: Float)
 

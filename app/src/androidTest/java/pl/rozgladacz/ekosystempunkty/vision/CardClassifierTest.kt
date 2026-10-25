@@ -21,6 +21,7 @@ class CardClassifierTest {
                 assertTrue(cell.probabilities.all { it.isFinite() && it in 0f..1f })
                 assertTrue(cell.probabilities.sum() in .99f..1.01f)
                 assertEquals(cell.probabilities.maxOrNull(), cell.confidence)
+                assertEquals(CardType.entries[cell.probabilities.indexOf(cell.confidence)], cell.type)
             }
         } finally {
             bitmap.recycle()

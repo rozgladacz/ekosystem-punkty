@@ -194,7 +194,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         mutableState.update { state ->
             val review = state.review ?: return@update state
             state.copy(review = review.copy(
-                cells = review.cells.toMutableList().also { it[index] = it[index].copy(type = type, confidence = 1f) },
+                cells = review.cells.toMutableList().also {
+                    it[index] = it[index].copy(type = type, confidence = 1f, reviewRequired = false)
+                },
                 manualOverrides = review.manualOverrides + (index to type),
             ))
         }

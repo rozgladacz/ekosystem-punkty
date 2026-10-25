@@ -62,10 +62,11 @@ APK debug powstaje w `app/build/outputs/apk/debug/`.
 ## Model kart
 
 Repozytorium zawiera eksperymentalny model FLOAT32 MobileNetV3-Small, ale nie
-zawiera zdjęć źródłowych. Rozpoznanie pojedynczych kart jest tylko sugestią:
-próg automatycznego przyjęcia wynosi 0,85, a użytkownik powinien sprawdzić
-wszystkie 20 pól. Wybór ręczny pokazuje typy w kolejności wyników modelu,
-również dla pola odrzuconego przez próg. Ranking jest zachowywany przy korekcie
+zawiera zdjęć źródłowych. Każde pole z wynikiem modelu otrzymuje najlepszą
+propozycję. Wyniki poniżej 0,85 oraz pola z odblaskiem lub sprzecznymi
+odczytami są zaznaczane na czerwono do sprawdzenia. Użytkownik powinien
+sprawdzić wszystkie 20 pól przed zatwierdzeniem. Wybór ręczny pokazuje typy
+w kolejności wyników modelu. Ranking jest zachowywany przy korekcie
 bieżącej partii. Proces przygotowania danych opisuje
 [`tools/model/README.md`](tools/model/README.md), a pochodzenie modelu
 [`MODEL_INFO.md`](app/src/main/assets/MODEL_INFO.md). Wynik prototypowego treningu opisuje

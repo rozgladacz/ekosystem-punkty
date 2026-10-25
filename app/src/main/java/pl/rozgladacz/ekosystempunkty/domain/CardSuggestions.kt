@@ -1,6 +1,6 @@
 package pl.rozgladacz.ekosystempunkty.domain
 
-/** Ranks every choice, including when the model did not accept any prediction. */
+/** Ranks every choice, including suggestions that still require review. */
 object CardSuggestions {
     fun orderedTypes(cell: RecognitionCell): List<CardType> {
         if (cell.probabilities.size == CardType.entries.size) {
