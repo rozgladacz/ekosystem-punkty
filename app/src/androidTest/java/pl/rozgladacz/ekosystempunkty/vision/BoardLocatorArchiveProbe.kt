@@ -33,14 +33,32 @@ class BoardLocatorArchiveProbe {
             val bytes = readShell("cat $root/images/$id.jpg")
             val bitmap = requireNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
             try {
-                val location = BoardLocator.locate(bitmap)
-                output.put(JSONObject().apply {
-                    put("capture_id", metadata.getString("capture_id"))
-                    put("confirmed_corners", metadata.getJSONArray("corners"))
-                    put("automatic_corners", JSONArray().apply {
-                        location.corners.forEach { put(JSONArray().put(it.x.toDouble()).put(it.y.toDouble())) }
+                val table = metadata.optInt("schema_version", 1) == 2
+                val locations = (if (table) MultiBoardLocator.locate(bitmap) else listOf(BoardLocator.locate(bitmap))).toMutableList()
+                val boards = if (table) metadata.getJSONArray("boards").let { array -> List(array.length()) { array.getJSONObject(it) } } else listOf(metadata)
+                boards.filter { it.optString("status") == "labeled" }.forEach { board ->
+                    val confirmed = board.getJSONArray("corners")
+                    val match = locations.flatMapIndexed { index, location ->
+                        (0..3).map { turn ->
+                            val points = location.corners.drop(turn) + location.corners.take(turn)
+                            val error = points.indices.sumOf { i ->
+                                val point = confirmed.getJSONArray(i)
+                                kotlin.math.hypot(points[i].x - point.getDouble(0), points[i].y - point.getDouble(1))
+                            }
+                            Triple(index, points, error)
+                        }
+                    }.minByOrNull { it.third }
+                    output.put(JSONObject().apply {
+                        put("capture_id", id)
+                        if (table) put("board_id", board.getString("board_id"))
+                        put("confirmed_corners", confirmed)
+                        put("detected", match != null)
+                        if (match != null) put("automatic_corners", JSONArray().apply {
+                            match.second.forEach { put(JSONArray().put(it.x.toDouble()).put(it.y.toDouble())) }
+                        })
                     })
-                })
+                    if (match != null) locations.removeAt(match.first)
+                }
             } finally {
                 bitmap.recycle()
             }

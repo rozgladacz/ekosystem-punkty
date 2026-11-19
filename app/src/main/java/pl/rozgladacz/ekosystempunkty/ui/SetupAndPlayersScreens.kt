@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import pl.rozgladacz.ekosystempunkty.domain.PlayerBoard
 
 @Composable
-fun SetupScreen(onStart: (List<String>) -> Unit) {
+fun SetupScreen(onStart: (List<String>) -> Unit, onScanTable: () -> Unit) {
     var playerCount by rememberSaveable { mutableStateOf(2) }
     var names by rememberSaveable { mutableStateOf(List(6) { "" }) }
 
@@ -36,6 +36,7 @@ fun SetupScreen(onStart: (List<String>) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text("Nowa partia", style = MaterialTheme.typography.headlineMedium)
+        Button(onClick = onScanTable, modifier = Modifier.fillMaxWidth()) { Text("Skanuj cały stół") }
         Text("Wybierz liczbę graczy. Nazwy są opcjonalne i pozostają wyłącznie na tym urządzeniu.")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             OutlinedButton(onClick = { if (playerCount > 2) playerCount-- }, enabled = playerCount > 2) { Text("−") }

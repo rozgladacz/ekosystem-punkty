@@ -22,6 +22,49 @@ import java.util.zip.ZipFile
 
 class DevelopmentArchiveTest {
     @Test
+    fun tablePhotoKeepsIndependentBoardLabelsAndGroupsInOneImage() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.cacheDir, "table-archive-${UUID.randomUUID()}")
+        val source = File.createTempFile("table-source-", ".jpg", context.cacheDir)
+        val exported = File.createTempFile("table-export-", ".zip", context.cacheDir)
+        val bitmap = Bitmap.createBitmap(800, 600, Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(Color.GREEN)
+        source.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+        bitmap.recycle()
+        try {
+            val archive = DevelopmentArchive(context, root)
+            val capture = archive.saveTablePhoto(Uri.fromFile(source))
+            val first = ArchiveBoard(UUID.randomUUID().toString(), UUID.randomUUID().toString(), listOf(
+                NormalizedPoint(.05f, .1f), NormalizedPoint(.45f, .1f), NormalizedPoint(.45f, .9f), NormalizedPoint(.05f, .9f)))
+            val second = ArchiveBoard(UUID.randomUUID().toString(), UUID.randomUUID().toString(), listOf(
+                NormalizedPoint(.55f, .1f), NormalizedPoint(.95f, .1f), NormalizedPoint(.95f, .9f), NormalizedPoint(.55f, .9f)))
+            archive.registerTableBoards(capture, listOf(first, second))
+            fun metadata() = JSONObject(File(root, "records/$capture.json").readText())
+            val probabilities = List(20) { List(11) { .1f } }
+            archive.labelPhoto(capture, List(20) { CardType.FOX }, first.corners, List(20) { .8f }, probabilities, setOf(2), first.boardId)
+            assertEquals("partial", metadata().getString("status"))
+            assertEquals("unlabeled", metadata().getJSONArray("boards").getJSONObject(1).getString("status"))
+            archive.labelPhoto(capture, List(20) { CardType.DEER }, second.corners, List(20) { .9f }, probabilities, emptySet(), second.boardId)
+            archive.updateLabeledGroup(first.groupId, List(20) { CardType.WOLF })
+            val saved = metadata()
+            assertEquals(2, saved.getInt("schema_version"))
+            assertEquals("labeled", saved.getString("status"))
+            assertFalse(saved.has("group_id"))
+            assertEquals("WOLF", saved.getJSONArray("boards").getJSONObject(0).getJSONArray("labels").getString(0))
+            assertEquals("DEER", saved.getJSONArray("boards").getJSONObject(1).getJSONArray("labels").getString(0))
+            assertEquals(1, archive.count())
+            assertEquals(1, archive.exportTo(Uri.fromFile(exported)))
+            ZipFile(exported).use { zip ->
+                assertEquals(1, zip.entries().asSequence().count { it.name.startsWith("images/") })
+                val text = zip.getInputStream(zip.getEntry("metadata/$capture.json")).bufferedReader().use { it.readText() }
+                assertFalse(text.contains("player_name"))
+                assertTrue(text.contains(first.boardId))
+                assertTrue(text.contains(second.boardId))
+            }
+        } finally { root.deleteRecursively(); source.delete(); exported.delete() }
+    }
+
+    @Test
     fun savesExifFreePhotoAndPrivateLabelsForManualZipExport() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val suffix = UUID.randomUUID().toString()

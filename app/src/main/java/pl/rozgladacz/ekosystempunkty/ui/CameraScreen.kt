@@ -53,6 +53,8 @@ fun CameraScreen(
     completedPhotos: Int,
     onCaptured: (Uri) -> Unit,
     onCancel: () -> Unit,
+    wholeTable: Boolean,
+    analyzing: Boolean,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -61,6 +63,9 @@ fun CameraScreen(
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
     var error by remember { mutableStateOf<String?>(null) }
+    var capturing by remember { mutableStateOf(false) }
+    var cameraReady by remember { mutableStateOf(false) }
+    var cameraActive by remember { mutableStateOf(true) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         permissionGranted = it
     }
@@ -72,6 +77,7 @@ fun CameraScreen(
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (permissionGranted) {
             var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+            val preview = remember { Preview.Builder().build() }
             AndroidView(
                 factory = { ctx ->
                     PreviewView(ctx).apply {
@@ -79,17 +85,26 @@ fun CameraScreen(
                         implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                         val future = ProcessCameraProvider.getInstance(ctx)
                         future.addListener({
-                            val provider = future.get()
-                            cameraProvider = provider
-                            val preview = Preview.Builder().build().also { it.surfaceProvider = surfaceProvider }
-                            provider.unbindAll()
-                            provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageCapture)
+                            if (cameraActive) {
+                                runCatching {
+                                    val provider = future.get()
+                                    preview.surfaceProvider = surfaceProvider
+                                    provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageCapture)
+                                    cameraProvider = provider
+                                }.onSuccess { cameraReady = true }
+                                    .onFailure { error = it.message ?: "Nie udało się uruchomić aparatu" }
+                            }
                         }, ContextCompat.getMainExecutor(ctx))
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
             )
-            DisposableEffect(Unit) { onDispose { cameraProvider?.unbindAll() } }
+            DisposableEffect(Unit) {
+                onDispose {
+                    cameraActive = false
+                    cameraProvider?.unbind(preview, imageCapture)
+                }
+            }
         } else {
             Column(
                 Modifier.align(Alignment.Center).padding(24.dp),
@@ -108,15 +123,16 @@ fun CameraScreen(
                 Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.65f)).padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(playerName, color = Color.White, style = MaterialTheme.typography.titleLarge)
+                Text(if (wholeTable) "Cały stół" else playerName, color = Color.White, style = MaterialTheme.typography.titleLarge)
                 Text(
-                    if (completedPhotos == 0) "Umieść wszystkie 20 kart wewnątrz prowadnicy"
+                    if (wholeTable) "Obejmij wszystkie układy 5×4. Zadbaj o ostrość i margines wokół kart."
+                    else if (completedPhotos == 0) "Umieść wszystkie 20 kart wewnątrz prowadnicy"
                     else "Dodatkowe zdjęcie ${completedPhotos + 1}/4: nie przesuwaj kart; zmień kąt, by ominąć odblask",
                     color = Color.White,
                 )
             }
             Box(Modifier.fillMaxWidth().weight(1f)) {
-                if (permissionGranted) GridGuide()
+                if (permissionGranted && !wholeTable) GridGuide()
             }
             Row(
                 Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.65f)).padding(16.dp),
@@ -124,8 +140,10 @@ fun CameraScreen(
             ) {
                 OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Anuluj", color = Color.White) }
                 Button(
-                    enabled = permissionGranted,
+                    enabled = cameraReady && !capturing && !analyzing,
                     onClick = {
+                        capturing = true
+                        error = null
                         val directory = File(context.cacheDir, "captures").apply { mkdirs() }
                         val file = File(directory, "${UUID.randomUUID()}.jpg")
                         imageCapture.takePicture(
@@ -133,10 +151,12 @@ fun CameraScreen(
                             ContextCompat.getMainExecutor(context),
                             object : ImageCapture.OnImageSavedCallback {
                                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                                    onCaptured(Uri.fromFile(file))
+                                    capturing = false
+                                    if (cameraActive) onCaptured(Uri.fromFile(file)) else file.delete()
                                 }
 
                                 override fun onError(exception: ImageCaptureException) {
+                                    capturing = false
                                     file.delete()
                                     error = exception.message ?: "Nie udało się zrobić zdjęcia"
                                 }

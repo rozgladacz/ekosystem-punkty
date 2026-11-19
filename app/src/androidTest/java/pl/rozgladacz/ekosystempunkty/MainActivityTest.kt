@@ -27,6 +27,7 @@ class MainActivityTest {
     @Test
     fun updatesAreExplicitlyManual() {
         rule.onNodeWithText("Ustawienia").performClick()
+        rule.onNodeWithText("Prywatność").assertDoesNotExist()
         rule.onNodeWithText("Aplikacja nigdy nie sprawdza aktualizacji automatycznie.").assertIsDisplayed()
         rule.onNodeWithText("Sprawdź aktualizacje").performScrollTo().assertIsDisplayed()
     }

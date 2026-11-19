@@ -1,20 +1,17 @@
 package pl.rozgladacz.ekosystempunkty.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,9 +21,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import pl.rozgladacz.ekosystempunkty.AppScreen
+import pl.rozgladacz.ekosystempunkty.CaptureMode
 import pl.rozgladacz.ekosystempunkty.MainViewModel
 import java.io.File
 
@@ -38,7 +37,14 @@ fun EcosystemApp(
     onExportDevelopment: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val showTopBar = state.screen !in setOf(AppScreen.CAMERA, AppScreen.CROP)
+    val showTopBar = state.screen !in setOf(AppScreen.CAMERA, AppScreen.CROP, AppScreen.TABLE_CROP)
+    BackHandler(enabled = state.screen in setOf(AppScreen.CAMERA, AppScreen.CROP, AppScreen.TABLE_CROP, AppScreen.REVIEW, AppScreen.SETTINGS, AppScreen.RESULTS)) {
+        when (state.screen) {
+            AppScreen.SETTINGS -> viewModel.closeSettings()
+            AppScreen.RESULTS -> viewModel.showPlayers()
+            else -> viewModel.cancelCaptureFlow()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -56,7 +62,7 @@ fun EcosystemApp(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(if (showTopBar) padding else androidx.compose.foundation.layout.PaddingValues())) {
             when (state.screen) {
-                AppScreen.SETUP -> SetupScreen(onStart = viewModel::startGame)
+                AppScreen.SETUP -> SetupScreen(onStart = viewModel::startGame, onScanTable = viewModel::captureTable)
                 AppScreen.PLAYERS -> PlayersScreen(
                     players = state.players,
                     onCapture = viewModel::capturePlayer,
@@ -69,6 +75,8 @@ fun EcosystemApp(
                     completedPhotos = state.review?.imageUris?.size ?: 0,
                     onCaptured = viewModel::onPhotoCaptured,
                     onCancel = viewModel::cancelCaptureFlow,
+                    wholeTable = state.captureMode == CaptureMode.TABLE,
+                    analyzing = state.busy,
                 )
                 AppScreen.CROP -> state.cropProposal?.let { proposal ->
                     CropScreen(
@@ -87,7 +95,12 @@ fun EcosystemApp(
                         onAddPhoto = viewModel::addPhotoToReview,
                         onRetake = viewModel::retakePhoto,
                         onCancel = viewModel::cancelCaptureFlow,
+                        tableReview = state.tableCapture != null,
+                        progress = if (state.tableCapture != null) "Układ ${review.playerIndex + 1} z ${state.players.size}" else null,
                     )
+                }
+                AppScreen.TABLE_CROP -> state.tableCapture?.let { table ->
+                    TableCropScreen(table, viewModel::updateTableBoards, viewModel::confirmTable, viewModel::retakePhoto, viewModel::cancelCaptureFlow)
                 }
                 AppScreen.RESULTS -> state.score?.let { score ->
                     ResultsScreen(
@@ -115,13 +128,15 @@ fun EcosystemApp(
 
             if (state.busy) {
                 Box(
-                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)),
+                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)).pointerInput(Unit) {
+                        awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
+                    },
                     contentAlignment = Alignment.Center,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = Color.White)
                         Spacer(Modifier.height(12.dp))
-                        Text("Analizuję zdjęcie…", color = Color.White)
+                        Text(state.analysisProgress ?: "Analizuję zdjęcie…", color = Color.White)
                     }
                 }
             }

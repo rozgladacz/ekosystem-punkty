@@ -1,11 +1,25 @@
 # Ekosystem Punkty
 
 Nieoficjalna, lokalna aplikacja Android do liczenia punktów w podstawowej
-polskiej edycji gry „Ekosystem”. Aplikacja prowadzi przez sfotografowanie układu
-5×4 każdego gracza, pozwala poprawić rozpoznane karty i wyświetla końcową tabelę.
+polskiej edycji gry „Ekosystem”. Przycisk **Skanuj cały stół** pozwala zrobić
+jedno zdjęcie wszystkich układów 5×4. Aplikacja proponuje osobne obrysy,
+automatycznie tworzy 2–6 graczy i rozpoznaje karty kolejno dla każdego z nich.
+Układy mogą być obrócone względem siebie. Przed rozpoznaniem można przybliżyć
+zdjęcie, zmienić nazwy, przesunąć narożniki, obrócić siatkę oraz dodać lub
+usunąć obrys. Detekcja jest przybliżona: każdy obrys musi obejmować dokładnie
+20 kart, a linie powinny przebiegać między kartami.
+
+Można również wcześniej wpisać graczy i fotografować ich układy osobno.
+Aplikacja pozwala poprawić rozpoznane karty i wyświetla końcową tabelę.
 Jeśli odblask zasłoni pole, można dodać do czterech zdjęć tego samego układu,
 bez przesuwania kart. Rozpoznania są łączone pole po polu; sprzeczne lub
 prześwietlone pola wymagają ręcznego potwierdzenia.
+
+Po zatwierdzeniu jednego gracza ze zdjęcia stołu aplikacja otwiera następnego,
+bez ponownego uruchamiania aparatu. Wspólne zdjęcie robocze pozostaje do końca
+tej kolejki. Wyjście ze skanowania zachowuje zatwierdzone plansze i usuwa
+zdjęcia robocze; pozostali gracze oczekują na osobne zdjęcia. Po restarcie
+procesu aplikacji przywracany jest ten sam stan zapisanej partii.
 
 ## Prywatność
 
@@ -37,7 +51,7 @@ jest osobny przycisk do ich usunięcia. Usunięcie aplikacji usuwa też prywatny
 materiał, jeśli nie został wcześniej wyeksportowany.
 
 W archiwum każdemu `images/<capture_id>.jpg` odpowiada
-`metadata/<capture_id>.json`. `group_id` łączy ujęcia jednej planszy,
+`metadata/<capture_id>.json`. W wersji 1 `group_id` łączy ujęcia jednej planszy,
 `shot_index` określa kolejność, a `status: labeled` oznacza planszę
 zatwierdzoną. Tablica `labels` ma 20 pól w kolejności wierszowej (4 wiersze
 po 5 kolumn); `corners` zawiera kolejno lewy górny, prawy górny, prawy dolny
@@ -46,6 +60,16 @@ rozmiar obrazu, SHA-256, wyniki modelu dla wszystkich 11 typów kart,
 pewności klasyfikatora i indeksy pól poprawionych ręcznie. Archiwum można
 przenieść np. kablem USB; aplikacja nigdy nie przesyła
 go samodzielnie.
+
+Zdjęcie całego stołu jest zapisywane raz, z `schema_version: 2`. Jego tablica
+`boards` zawiera osobne rekordy układów: `board_id`, `group_id`, `shot_index`,
+`corners`, `status` oraz — po zatwierdzeniu — `labels`, `recognition_confidence`,
+`class_probabilities` i `manually_corrected_indices`. Narożniki są podane we
+współrzędnych całego zdjęcia po korekcie EXIF, w logicznej kolejności siatki,
+również dla układów obróconych. `group_id` każdego układu łączy go z dodatkowymi
+zdjęciami pojedynczego gracza. Stan główny `partial` oznacza zatwierdzenie
+części układów, a `labeled` — wszystkich. Nazwy graczy nie trafiają do plików.
+Dotychczasowe rekordy wersji 1 pozostają obsługiwane przez aplikację i audyt.
 
 ## Budowanie
 

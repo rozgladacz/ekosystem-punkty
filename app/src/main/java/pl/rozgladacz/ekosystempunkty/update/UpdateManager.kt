@@ -64,23 +64,44 @@ class UpdateManager(private val context: Context) {
             require(info.apkUrl.startsWith("https://github.com/${BuildConfig.REPOSITORY}/releases/download/")) {
                 "Nieprawidłowy adres pliku aktualizacji"
             }
+            require(info.size in 1..MAX_APK_SIZE) { "Nieprawidłowy rozmiar aktualizacji w manifeście" }
             val directory = File(context.cacheDir, "updates").apply {
-                mkdirs()
+                check(mkdirs() || isDirectory) { "Nie można utworzyć katalogu aktualizacji" }
                 listFiles()?.forEach(File::delete)
             }
-            val target = File(directory, "ekosystem-punkty-${info.versionName}.apk")
-            val connection = open(info.apkUrl)
+            val target = File.createTempFile("ekosystem-punkty-", ".apk", directory)
             try {
-                connection.inputStream.use { input -> target.outputStream().use(input::copyTo) }
-            } finally {
-                connection.disconnect()
+                downloadApk(info, target)
+                require(target.sha256() == info.sha256) { "Suma kontrolna aktualizacji jest nieprawidłowa" }
+                verifyApk(target, info.versionCode)
+                UpdateDownloadResult.Ready(target)
+            } catch (error: Throwable) {
+                target.delete()
+                throw error
             }
-            require(target.length() > 0) { "Pobrany plik jest pusty" }
-            if (info.size > 0) require(target.length() == info.size) { "Rozmiar pobranego pliku jest nieprawidłowy" }
-            require(target.sha256() == info.sha256) { "Suma kontrolna aktualizacji jest nieprawidłowa" }
-            verifyApk(target, info.versionCode)
-            UpdateDownloadResult.Ready(target)
         }.getOrElse { UpdateDownloadResult.Failure(it.userMessage("Nie udało się pobrać aktualizacji")) }
+    }
+
+    private fun downloadApk(info: UpdateInfo, target: File) {
+        val connection = open(info.apkUrl)
+        val sizeError = "Rozmiar pobranego pliku jest nieprawidłowy"
+        try {
+            connection.inputStream.use { input ->
+                target.outputStream().use { output ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    var remaining = info.size
+                    while (remaining > 0) {
+                        val size = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
+                        require(size >= 0) { sizeError }
+                        output.write(buffer, 0, size)
+                        remaining -= size
+                    }
+                    require(input.read() == -1) { sizeError }
+                }
+            }
+        } finally {
+            connection.disconnect()
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -142,6 +163,7 @@ class UpdateManager(private val context: Context) {
 
     companion object {
         private const val MANIFEST_NAME = "update.json"
+        private const val MAX_APK_SIZE = 256L * 1024 * 1024
     }
 }
 

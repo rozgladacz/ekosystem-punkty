@@ -14,6 +14,7 @@ from zipfile import ZipFile
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageOps
+from archive_records import board_records, observation_id
 
 
 def main() -> None:
@@ -37,7 +38,8 @@ def main() -> None:
     confusions = Counter()
     orientation_metrics = defaultdict(Counter)
     interpreter = None
-    locator_results = {entry["capture_id"]: entry for entry in json.loads(args.locator_results.read_text())} if args.locator_results else {}
+    locator_results = {observation_id(entry): entry for entry in json.loads(args.locator_results.read_text())
+                       if "automatic_corners" in entry} if args.locator_results else {}
     locator_errors = []
     if args.model:
         import tensorflow as tf
@@ -55,8 +57,14 @@ def main() -> None:
 
     with ZipFile(args.archive) as archive:
         labels = archive.read("card_labels.txt").decode("utf-8").split()
-        metadata = [json.loads(archive.read(name)) for name in archive.namelist()
+        captures = [json.loads(archive.read(name)) for name in archive.namelist()
                     if name.startswith("metadata/") and name.endswith(".json")]
+        captures_by_id = {record["capture_id"]: record for record in captures}
+        if len(captures_by_id) != len(captures):
+            raise ValueError("Duplicate capture ID")
+        metadata = [board for capture in captures for board in board_records(capture)]
+        if not metadata:
+            raise ValueError("Archive contains no confirmed board labels")
         metadata.sort(key=lambda entry: (entry["group_id"], entry["shot_index"]))
         photo_sheet = Image.new("RGB", (1440, ((len(metadata)+2)//3)*680), "white")
         warp_sheet = Image.new("RGB", (1800, ((len(metadata)+2)//3)*730), "white")
@@ -74,7 +82,7 @@ def main() -> None:
                     raise ValueError("Capture ID and image filename differ")
                 (fixture_root/"images"/fixture_name).write_bytes(raw)
                 (fixture_root/"metadata"/(record["capture_id"]+".json")).write_text(
-                    json.dumps(record), encoding="utf-8")
+                    json.dumps(captures_by_id[record["capture_id"]]), encoding="utf-8")
             image = ImageOps.exif_transpose(Image.open(BytesIO(raw))).convert("RGB")
             if image.size != (record["image_width"], record["image_height"]):
                 raise ValueError("Image dimensions differ from metadata")
@@ -92,14 +100,14 @@ def main() -> None:
             correct = np.asarray([labels[p] == t for p, t in zip(predicted, truth)])
             high = confidence >= .85
             top3 = np.argsort(-probabilities, axis=1)[:, :3]
-            summary.update({"photos": 1, "cells": 20, "correct": int(correct.sum()),
+            summary.update({"boards": 1, "cells": 20, "correct": int(correct.sum()),
                             "high_confidence": int(high.sum()), "high_correct": int((high & correct).sum()),
                             "low_confidence": int((~high).sum()), "low_correct": int((~high & correct).sum()),
                             "top3_correct": sum(labels.index(t) in ranks for t, ranks in zip(truth, top3)),
                             "manually_touched": len(record["manually_corrected_indices"])})
             group = record["group_id"]
             groups[group].append(record)
-            item = {"number": index+1, "capture_id": record["capture_id"], "group_id": group,
+            item = {"number": index+1, "capture_id": record["capture_id"], "board_id": record.get("board_id"), "observation_id": record["observation_id"], "group_id": group,
                     "shot_index": record["shot_index"], "correct": int(correct.sum()),
                     "high_confidence": int(high.sum()), "low_confidence": int((~high).sum()),
                     "corners": record["corners"], "errors": []}
@@ -109,10 +117,10 @@ def main() -> None:
             draw = ImageDraw.Draw(preview)
             points = [(float(x*preview.width), float(y*preview.height)) for x, y in corners]
             draw.line(points+points[:1], fill="#00ff55", width=3)
-            if record["capture_id"] in locator_results:
-                automatic = np.asarray(locator_results[record["capture_id"]]["automatic_corners"])
+            if record["observation_id"] in locator_results:
+                automatic = np.asarray(locator_results[record["observation_id"]]["automatic_corners"])
                 delta = np.abs(automatic-corners)
-                locator_errors.append({"capture_id": record["capture_id"],
+                locator_errors.append({"capture_id": record["capture_id"], "board_id": record.get("board_id"),
                     "max_coordinate_delta": float(delta.max()),
                     "mean_corner_distance_pixels": float(np.linalg.norm(delta*np.asarray(image.size), axis=1).mean())})
                 auto_points = [(float(x*preview.width), float(y*preview.height)) for x,y in automatic]
@@ -166,6 +174,7 @@ def main() -> None:
         if any(shot["labels"] != shots[0]["labels"] for shot in shots):
             raise ValueError(f"Labels differ inside group {group}")
     summary["layouts"] = len(groups)
+    summary["photos"] = len({record["capture_id"] for record in metadata})
     summary["unique_cells"] = len(groups)*20
     summary["paired_layouts"] = sum(len(shots)>1 for shots in groups.values())
     report = {"summary": dict(summary), "classes": {k: dict(v) for k,v in class_stats.items()},

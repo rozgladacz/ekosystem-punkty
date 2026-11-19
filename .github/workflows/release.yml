@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
@@ -19,6 +19,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Unit tests, lint and debug build
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug
+      - name: Capture archive compatibility
+        run: python3 -B -m unittest discover -s tools/model -p 'test_*.py'
 
   instrumentation:
     name: UI tests (API ${{ matrix.api-level }})
@@ -53,10 +55,13 @@ jobs:
   release:
     needs: [verify, instrumentation]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -93,10 +98,11 @@ jobs:
           SIZE=$(stat -c%s "$APK")
           TAG="v$VERSION_NAME"
           URL="https://github.com/${{ github.repository }}/releases/download/$TAG/ekosystem-punkty.apk"
-          jq -n --argjson versionCode "$VERSION_CODE" --arg versionName "$VERSION_NAME" --arg apkUrl "$URL" --argjson size "$SIZE" --arg sha256 "$SHA" --arg notes "Automatyczne wydanie z main: ${{ github.sha }}" '{versionCode:$versionCode,versionName:$versionName,apkUrl:$apkUrl,size:$size,sha256:$sha256,notes:$notes}' > update.json
+          NOTES=$(git log -1 --format=%s)
+          jq -n --argjson versionCode "$VERSION_CODE" --arg versionName "$VERSION_NAME" --arg apkUrl "$URL" --argjson size "$SIZE" --arg sha256 "$SHA" --arg notes "$NOTES" '{versionCode:$versionCode,versionName:$versionName,apkUrl:$apkUrl,size:$size,sha256:$sha256,notes:$notes}' > update.json
           cp "$APK" ekosystem-punkty.apk
       - name: Publish immutable GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION_NAME: 0.1.${{ github.run_number }}
-        run: gh release create "v$VERSION_NAME" ekosystem-punkty.apk update.json --title "Ekosystem Punkty $VERSION_NAME" --generate-notes
+        run: gh release create "v$VERSION_NAME" ekosystem-punkty.apk update.json --target "$GITHUB_SHA" --title "Ekosystem Punkty $VERSION_NAME" --generate-notes

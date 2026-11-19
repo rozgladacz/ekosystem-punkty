@@ -17,6 +17,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Tests, lint and debug APK
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug
+      - name: Capture archive compatibility
+        run: python3 -B -m unittest discover -s tools/model -p 'test_*.py'
 
   instrumentation:
     name: UI tests (API ${{ matrix.api-level }})

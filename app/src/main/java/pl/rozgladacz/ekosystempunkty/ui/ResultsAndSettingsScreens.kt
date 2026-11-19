@@ -16,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.AlertDialog
@@ -124,15 +123,6 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text("Ustawienia", style = MaterialTheme.typography.headlineMedium)
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Prywatność", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    if (developmentMode) "Zdjęcia są analizowane lokalnie. W trybie rozwoju kopie pozostają na urządzeniu do ręcznego eksportu lub usunięcia. Brak kont, chmury i telemetrii."
-                    else "Zdjęcia są analizowane lokalnie i usuwane po zatwierdzeniu, chyba że zapisano je wcześniej w trybie rozwoju. Brak kont, chmury i telemetrii.",
-                )
-            }
-        }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Aktualizacje", style = MaterialTheme.typography.titleMedium)

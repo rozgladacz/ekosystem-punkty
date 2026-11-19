@@ -55,10 +55,13 @@ import kotlinx.coroutines.withContext
 import pl.rozgladacz.ekosystempunkty.ReviewState
 import pl.rozgladacz.ekosystempunkty.MainViewModel
 import pl.rozgladacz.ekosystempunkty.domain.BoardGrid
+import pl.rozgladacz.ekosystempunkty.domain.BoardGeometry
+import pl.rozgladacz.ekosystempunkty.domain.BoardProjection
 import pl.rozgladacz.ekosystempunkty.domain.CardType
 import pl.rozgladacz.ekosystempunkty.domain.CardSuggestions
 import pl.rozgladacz.ekosystempunkty.domain.NormalizedPoint
 import pl.rozgladacz.ekosystempunkty.vision.BitmapLoader
+import pl.rozgladacz.ekosystempunkty.vision.BoardRecognizer
 import pl.rozgladacz.ekosystempunkty.vision.CropProposal
 import kotlin.math.roundToInt
 
@@ -88,6 +91,7 @@ fun CropScreen(
                 color = Color(0xFFFFD54F),
             )
         }
+        if (!BoardGeometry.isValid(corners)) Text("Narożniki nie mogą się przecinać. Popraw obrys układu.", color = Color(0xFFFF8A80))
         bitmap?.let { image ->
             Box(
                 Modifier.fillMaxWidth().weight(1f).aspectRatio(image.width.toFloat() / image.height),
@@ -137,25 +141,27 @@ fun CropScreen(
                     },
                 ) {
                     val points = corners.map { Offset(it.x * size.width, it.y * size.height) }
-                    fun between(a: Offset, b: Offset, fraction: Float) =
-                        Offset(a.x + (b.x - a.x) * fraction, a.y + (b.y - a.y) * fraction)
-                    for (column in 1..4) {
-                        val fraction = column / 5f
-                        drawLine(
-                            Color(0xFFFFD54F),
-                            between(points[0], points[1], fraction),
-                            between(points[3], points[2], fraction),
-                            3f,
-                        )
-                    }
-                    for (row in 1..3) {
-                        val fraction = row / 4f
-                        drawLine(
-                            Color(0xFFFFD54F),
-                            between(points[0], points[3], fraction),
-                            between(points[1], points[2], fraction),
-                            3f,
-                        )
+                    fun screen(point: NormalizedPoint) = Offset(point.x * size.width, point.y * size.height)
+                    if (BoardGeometry.isValid(corners)) {
+                        val projection = BoardProjection(corners)
+                        for (column in 1..4) {
+                            val fraction = column / 5f
+                            drawLine(
+                                Color(0xFFFFD54F),
+                                screen(projection.point(fraction, 0f)),
+                                screen(projection.point(fraction, 1f)),
+                                3f,
+                            )
+                        }
+                        for (row in 1..3) {
+                            val fraction = row / 4f
+                            drawLine(
+                                Color(0xFFFFD54F),
+                                screen(projection.point(0f, fraction)),
+                                screen(projection.point(1f, fraction)),
+                                3f,
+                            )
+                        }
                     }
                     points.indices.forEach { index ->
                         drawLine(Color(0xFF9CFFB5), points[index], points[(index + 1) % points.size], 5f)
@@ -166,10 +172,12 @@ fun CropScreen(
                 }
             }
         }
+        OutlinedButton(onClick = { corners = corners.drop(1) + corners.take(1) }) { Text("Obróć siatkę 90°") }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(onClick = onRetake, modifier = Modifier.weight(1f)) { Text("Powtórz") }
             Button(
                 onClick = { onConfirm(proposal.copy(corners = corners)) },
+                enabled = BoardGeometry.isValid(corners),
                 modifier = Modifier.weight(1f),
             ) { Text("Rozpoznaj") }
         }
@@ -185,8 +193,10 @@ fun ReviewScreen(
     onAddPhoto: () -> Unit,
     onRetake: () -> Unit,
     onCancel: () -> Unit,
+    tableReview: Boolean = false,
+    progress: String? = null,
 ) {
-    var selectedIndex by remember { mutableIntStateOf(-1) }
+    var selectedIndex by remember(review.playerIndex) { mutableIntStateOf(-1) }
     val missing = review.cells.count { it.type == null }
     val toReview = review.cells.count { it.needsReview }
     Column(
@@ -194,6 +204,7 @@ fun ReviewScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text("Sprawdź: $playerName", style = MaterialTheme.typography.headlineSmall)
+        progress?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
         Text(
             when {
                 missing > 0 -> "Uzupełnij $missing nierozpoznanych pól. Dotknij każdego pustego pola."
@@ -213,13 +224,13 @@ fun ReviewScreen(
             )
         }
         review.imageUri?.let { uri ->
-            val image = rememberPreviewBitmap(uri.toString())
+            val image = rememberPreviewBitmap(uri.toString(), review.cornersByShot.lastOrNull())
             image?.let {
                 Image(
                     bitmap = it.asImageBitmap(),
                     contentDescription = "Zdjęcie gracza",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxWidth().height(150.dp),
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxWidth().height(220.dp),
                 )
             }
         }
@@ -264,6 +275,7 @@ fun ReviewScreen(
                 Text("Zatwierdź")
             }
         }
+        if (tableReview) TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Zakończ skanowanie") }
     }
 
     if (selectedIndex >= 0) {
@@ -299,11 +311,14 @@ fun ReviewScreen(
 }
 
 @Composable
-internal fun rememberPreviewBitmap(uri: String): Bitmap? {
+internal fun rememberPreviewBitmap(uri: String, corners: List<NormalizedPoint>? = null): Bitmap? {
     val context = LocalContext.current
-    val bitmap by produceState<Bitmap?>(null, uri) {
+    val bitmap by produceState<Bitmap?>(null, uri, corners) {
         value = withContext(Dispatchers.IO) {
-            runCatching { BitmapLoader.load(context, android.net.Uri.parse(uri), maximumSide = 1400) }.getOrNull()
+            runCatching {
+                if (corners != null) BoardRecognizer.preview(context, android.net.Uri.parse(uri), corners)
+                else BitmapLoader.load(context, android.net.Uri.parse(uri), maximumSide = 1400)
+            }.getOrNull()
         }
     }
     // Compose may still draw the previous frame after this composable leaves the

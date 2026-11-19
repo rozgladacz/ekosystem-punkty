@@ -1,5 +1,27 @@
 # Przygotowanie klasyfikatora kart
 
+## Archiwa ze zdjęciami całego stołu
+
+`archive_records.py` odczytuje starsze rekordy wersji 1 oraz `boards[]` z wersji 2.
+Zdjęcie ma jeden `capture_id`; każdy układ ma własne `board_id` i `group_id`.
+Audyt rozróżnia liczbę zdjęć (`photos`) od obserwacji plansz (`boards`) i pomija
+niezatwierdzone układy. Kolejne zdjęcia tej samej planszy nadal łączy `group_id`.
+Do porównania automatycznych narożników służy para `capture_id`/`board_id`;
+dla starszych rekordów wystarczy `capture_id`.
+
+`audit_app_captures.py ARCHIWUM.zip KATALOG_WYJSCIOWY --fixtures` zachowuje
+w diagnostycznych metadanych całą tablicę plansz. `BoardLocatorArchiveProbe`
+obsługuje oba formaty. Narożniki określają logiczną siatkę 5×4, więc nie należy
+sortować ich ponownie według położenia na zdjęciu ani obracać całego zdjęcia
+osobno dla każdego gracza.
+
+Test zgodności formatu: `python -B -m unittest discover -s tools/model -p 'test_*.py'`.
+
+Implementację i zakres sprawdzenia skanowania wielu plansz opisuje
+[`TABLE_SCAN_REPORT.md`](TABLE_SCAN_REPORT.md).
+
+## Dane do klasyfikatora
+
 Zdjęcia robocze umieść w `training-data/` lub `Zdjecia/`; oba katalogi są
 ignorowane przez Git. Minimum z planu to trzy osobne zdjęcia każdego typu
 karty i 30 pełnych układów wykonanych przy różnych tłach, kątach i oświetleniu.
